@@ -1872,9 +1872,10 @@
     emulators.forEach((emu) => {
       const item = document.createElement('div');
       item.className = 'emu-item';
+      const bundledBadge = emu.bundled ? '<span class="emu-bundled">Incluido</span> ' : '';
       item.innerHTML = `
         <div class="emu-item-info">
-          <div class="emu-item-name">${esc(emu.name)}</div>
+          <div class="emu-item-name">${bundledBadge}${esc(emu.name)}</div>
           <div class="emu-item-console">${esc(emu.console || 'Retro')}</div>
           <div class="emu-item-paths">${esc(emu.exePath)}${emu.romsPath ? '<br>' + esc(emu.romsPath) : ''}</div>
         </div>

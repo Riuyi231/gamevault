@@ -3,3 +3,7 @@ dist/
 data/
 out/
 *.log
+# Emuladores empaquetados (se generan con npm run fetch-emulators)
+resources/emulators/*
+!resources/emulators/README.txt
+

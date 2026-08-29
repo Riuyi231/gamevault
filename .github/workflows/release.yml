@@ -20,6 +20,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Fetch bundled emulators
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/init-emulators.ps1
+
       - name: Build & Publish to GitHub Release
         run: npx electron-builder --win nsis --x64 --publish always
         env:

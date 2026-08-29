@@ -192,7 +192,8 @@ class GameStore {
       console: emulator.console || 'Retro',
       exePath: emulator.exePath || '',
       romsPath: emulator.romsPath || '',
-      args: emulator.args || ''
+      args: emulator.args || '',
+      bundled: !!emulator.bundled
     };
     if (!emus.some((e) => e.id === config.id)) {
       this._data.emulators = [...emus, config];

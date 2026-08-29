@@ -9,6 +9,7 @@ const GameStore = require('./services/game-store');
 const ArtworkService = require('./services/artwork');
 const GameInfoService = require('./services/game-info');
 const UpdaterService = require('./services/updater');
+const { EmulatorCatalog } = require('./services/emulator-catalog');
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
@@ -20,6 +21,7 @@ let gameDetector = null;
 let artworkService = null;
 let gameInfoService = null;
 let updaterService = null;
+let emulatorCatalog = null;
 let watcher = null;
 let currentScan = null;
 let periodicTimer = null;
@@ -655,7 +657,14 @@ app.whenReady().then(async () => {
   artworkService = new ArtworkService(dataDir);
   gameInfoService = new GameInfoService();
   updaterService = new UpdaterService(process.env.GAMEVAULT_UPDATE_REPO || 'Riuyi231/gamevault');
+  emulatorCatalog = new EmulatorCatalog();
   syncServiceKeys(gameStore.getSettings());
+
+  // Registra los emuladores incluidos en el instalador (si están presentes)
+  const bundledResult = emulatorCatalog.apply(gameStore);
+  if (bundledResult && bundledResult.registered.length) {
+    log('Emuladores incluidos registrados:', bundledResult.registered.join(', '));
+  }
 
   createWindow();
   setupIPC();
