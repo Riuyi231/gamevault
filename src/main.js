@@ -351,6 +351,27 @@ function sendToRenderer(channel, payload) {
   }
 }
 
+const pendingEmuCovers = new Set();
+
+// Busca el logo/portada real de cada emulador (Wikipedia, sin clave) y lo
+// persiste en el store; luego avisa al renderer para que refresque las vistas.
+async function enrichEmulatorCovers() {
+  if (!artworkService) return;
+  try {
+    for (const emu of gameStore.getEmulators()) {
+      if (emu.coverUrl || pendingEmuCovers.has(emu.id)) continue;
+      pendingEmuCovers.add(emu.id);
+      const logo = await artworkService.searchEmulatorLogo(emu.name || emu.console || '');
+      if (logo) {
+        gameStore.updateEmulator(emu.id, { coverUrl: logo });
+        sendToRenderer('emulators-updated');
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function attachLocalCovers(game) {
   const clean = { ...game };
   const local = artworkService.getCoverLocal(clean.id);
@@ -769,6 +790,7 @@ function setupIPC() {
   /* ── Emuladores (retro) ── */
 
   ipcMain.handle('get-emulators', async () => {
+    enrichEmulatorCovers();
     return gameStore.getEmulators();
   });
 
@@ -776,6 +798,7 @@ function setupIPC() {
     const config = gameStore.addEmulator(emulator || {});
     rebuildWatcher();
     setTimeout(runScan, 250);
+    setTimeout(enrichEmulatorCovers, 300);
     return config;
   });
 
@@ -1057,6 +1080,7 @@ app.whenReady().then(async () => {
 
   setInterval(tickPlaySessions, 5000);
 
+  setTimeout(() => enrichEmulatorCovers(), 1200);
   setTimeout(() => runScan(), 150);
 });
 

@@ -206,6 +206,7 @@ class GameStore {
       exePath: emulator.exePath || '',
       romsPath: emulator.romsPath || '',
       args: emulator.args || '',
+      coverUrl: emulator.coverUrl || '',
       bundled: !!emulator.bundled
     };
     if (!emus.some((e) => e.id === config.id)) {
@@ -216,6 +217,19 @@ class GameStore {
       this._save();
     }
     return config;
+  }
+
+  updateEmulator(id, patch) {
+    let updated = null;
+    this._data.emulators = this.getEmulators().map((e) => {
+      if (e.id === id) {
+        updated = { ...e, ...(patch || {}) };
+        return updated;
+      }
+      return e;
+    });
+    if (updated) this._save();
+    return updated;
   }
 
   removeEmulator(id) {

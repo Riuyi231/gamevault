@@ -239,6 +239,82 @@ class ArtworkService {
     return results.slice(0, 12);
   }
 
+  // Logo/portada real del emulador o consola vía Wikipedia (sin clave).
+  // `name` es el nombre del emulador (p.ej. "N64 (RetroArch core)"); se mapea a
+  // un artículo exacto conocido para evitar resultados erróneos (p.ej. "Dolphin"
+  // → el animal, "Saturn" → el planeta) y la no-determinancia de la búsqueda.
+  async searchEmulatorLogo(name) {
+    if (!name) return '';
+    const low = String(name).toLowerCase();
+    const consoleTitles = {
+      'nintendo 64': 'Nintendo_64', 'n64': 'Nintendo_64',
+      'super nintendo': 'Super_Nintendo_Entertainment_System', 'snes': 'Super_Nintendo_Entertainment_System',
+      'nes': 'NES',
+      'genesis': 'Sega_Genesis', 'mega drive': 'Sega_Genesis',
+      'saturn': 'Sega_Saturn',
+      'dreamcast': 'Dreamcast',
+      'playstation portable': 'PlayStation_Portable', 'psp': 'PlayStation_Portable',
+      'playstation 2': 'PlayStation_2', 'ps2': 'PlayStation_2',
+      'playstation': 'PlayStation_(console)', 'psx': 'PlayStation_(console)', 'ps1': 'PlayStation_(console)',
+      'game boy advance': 'Game_Boy_Advance', 'gba': 'Game_Boy_Advance', 'advance': 'Game_Boy_Advance',
+      'game boy color': 'Game_Boy_Color', 'gbc': 'Game_Boy_Color', 'game boy': 'Game_Boy_Color', 'gameboy': 'Game_Boy_Color',
+      'nintendo ds': 'Nintendo_DS', 'nds': 'Nintendo_DS',
+      'gamecube': 'Nintendo_GameCube', 'wii': 'Nintendo_GameCube'
+    };
+    const softwareTitles = {
+      'retroarch': 'RetroArch', 'pcsx2': 'PCSX2', 'dolphin': 'Dolphin_(emulator)', 'duckstation': 'DuckStation'
+    };
+    const pick = (map) =>
+      Object.keys(map)
+        .sort((a, b) => b.length - a.length)
+        .find((k) => low === k || low.includes(k));
+    try {
+      // Los cores de RetroArch representan su consola (N64, Genesis...), así que
+      // la consola gana frente al logo del propio RetroArch. Si el artículo
+      // canónico no responde (p.ej. rate-limit) NO se cae a una búsqueda difusa:
+      // mejor quedarse sin portada esta vez que persistir una imagen errónea.
+      const cKey = pick(consoleTitles);
+      if (cKey) return await this._wikiLogoUrl(consoleTitles[cKey]);
+      const eKey = pick(softwareTitles);
+      if (eKey) return await this._wikiLogoUrl(softwareTitles[eKey]);
+      const results = await this._searchWikipedia(name);
+      const hit = results.find((r) => r && r.url);
+      return hit ? hit.url : '';
+    } catch {
+      return '';
+    }
+  }
+
+  // Imagen principal (logo/caja) de un artículo exacto de Wikipedia, sin clave.
+  async _wikiLogoUrl(title) {
+    if (!title) return '';
+    if (!this._logoCache) this._logoCache = {};
+    if (this._logoCache[title] !== undefined) return this._logoCache[title];
+    for (const lang of ['es', 'en']) {
+      const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(String(title).replace(/ /g, '_'))}`;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const { status, body } = await this._httpGetJson(url, 8000);
+          if (status === 429) {
+            await new Promise((r) => setTimeout(r, 1200));
+            continue;
+          }
+          if (status !== 200) break;
+          const d = JSON.parse(body);
+          if (!d || !d.pageid) break;
+          const img = (d.originalimage && d.originalimage.source) || (d.thumbnail && d.thumbnail.source) || '';
+          if (img) {
+            this._logoCache[title] = img;
+            return img;
+          }
+        } catch {
+          break;
+        }
+      }
+    }
+    return '';
+  }
+
   async _searchRawg(name) {
     const results = [];
     if (!this.rawgKey || !name) return results;

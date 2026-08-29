@@ -1285,8 +1285,14 @@
     }
     for (const emu of state.emulators || []) {
       const key = 'c:' + (emu.console || 'Retro');
-      if (!map.has(key)) {
-        map.set(key, { key, filter: emu.console || 'Retro', label: emu.console || 'Retro', count: 0, playtimeMs: 0, lastPlayed: 0 });
+      const entry = map.get(key);
+      if (!entry) {
+        map.set(key, {
+          key, filter: emu.console || 'Retro', label: emu.console || 'Retro',
+          count: 0, playtimeMs: 0, lastPlayed: 0, cover: emu.coverUrl || ''
+        });
+      } else if (emu.coverUrl && !entry.cover) {
+        entry.cover = emu.coverUrl;
       }
     }
     return Array.from(map.values())
@@ -1362,9 +1368,11 @@
     grid.innerHTML = groups.map((g) => {
       const hue = colorForTag(g.filter);
       const icon = platformIconOf(g.filter) || platformIconOf(g.label);
-      const iconHtml = icon
-        ? `<span class="console-icon" style="--tile-h:${hue}">${icon}</span>`
-        : `<span class="console-monogram" style="--tile-h:${hue}">${esc(monogramOf(g.label))}</span>`;
+      const iconHtml = g.cover
+        ? `<span class="console-icon" style="--tile-h:${hue}"><img class="console-cover" src="${esc(g.cover)}" alt="${esc(g.label)}" loading="lazy" onerror="this.parentNode.style.display='none'"></span>`
+        : icon
+          ? `<span class="console-icon" style="--tile-h:${hue}">${icon}</span>`
+          : `<span class="console-monogram" style="--tile-h:${hue}">${esc(monogramOf(g.label))}</span>`;
       return `<button class="console-tile" data-filter="${esc(g.filter)}" role="button">
         ${iconHtml}
         <span class="console-name">${esc(g.label)}</span>
@@ -1407,9 +1415,11 @@
   /* ═══════════════ EMULATORS VIEW ═══════════════ */
   function emulatorCard(emu) {
     const icon = platformIconOf(emu.console || 'Retro');
-    const iconHtml = icon
-      ? `<span class="console-icon emu-card-icon">${icon}</span>`
-      : `<span class="console-monogram">${esc(monogramOf(emu.name))}</span>`;
+    const iconHtml = emu.coverUrl
+      ? `<span class="console-icon emu-card-icon"><img class="console-cover" src="${esc(emu.coverUrl)}" alt="" loading="lazy" onerror="this.parentNode.style.display='none'"></span>`
+      : icon
+        ? `<span class="console-icon emu-card-icon">${icon}</span>`
+        : `<span class="console-monogram">${esc(monogramOf(emu.name))}</span>`;
     const bundled = emu.bundled ? `<span class="emu-bundled">${esc(T('emu.bundled'))}</span>` : '';
     const status = emulatorStatusText(emu);
     const exeOk = emu.exePath ? `<span class="emu-card-path">${esc(emu.exePath)}</span>` : '';
@@ -2232,6 +2242,7 @@
       state.emulators = emus || [];
       renderEmulatorsList(state.emulators);
       renderEmulatorsView();
+      if (state.consolesOpen) renderConsoles();
     } catch (err) {
       console.error('Failed to load emulators:', err);
     }
@@ -2854,6 +2865,12 @@
 
   api.onGameRemoved((id) => {
     removeGameFromState(id);
+    if (typeof loadEmulators === 'function') loadEmulators();
+  });
+
+  // Las portadas de los emuladores llegan tras el primer abrir de las vistas:
+  // reload en segundo plano para que los tiles de consolas las muestren.
+  api.onEmulatorsUpdated(() => {
     if (typeof loadEmulators === 'function') loadEmulators();
   });
 

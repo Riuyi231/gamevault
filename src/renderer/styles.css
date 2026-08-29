@@ -2658,6 +2658,15 @@ input[type='range']::-webkit-slider-thumb {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 .console-icon svg { width: 26px; height: 26px; }
+.console-icon .console-cover,
+.console-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #0a0e17;
+}
+.emu-card-icon .console-cover { border-radius: 13px; }
 
 .emulators-grid {
   display: flex;

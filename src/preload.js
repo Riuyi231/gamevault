@@ -41,7 +41,8 @@ const api = {
   onGameAdded: (cb) => ipcRenderer.on('game-added', (_, g) => cb(g)),
   onGameRemoved: (cb) => ipcRenderer.on('game-removed', (_, id) => cb(id)),
   onScanProgress: (cb) => ipcRenderer.on('scan-progress', (_, d) => cb(d)),
-  onScanComplete: (cb) => ipcRenderer.on('scan-complete', (_, d) => cb(d))
+  onScanComplete: (cb) => ipcRenderer.on('scan-complete', (_, d) => cb(d)),
+  onEmulatorsUpdated: (cb) => ipcRenderer.on('emulators-updated', (_, d) => cb(d))
 };
 
 contextBridge.exposeInMainWorld('gamevault', api);
