@@ -100,7 +100,19 @@ class ArtworkService {
     }
   }
 
-  _httpGetJson(url, timeoutMs = 10000, extraHeaders = {}) {
+  // Cola global: espacia las peticiones para no saturar Wikipedia/Steam/RAWG y
+  // reintenta los 429 (rate-limit) con backoff. Evita que las portadas/capturas
+  // de unos juegos salgan y las de otros no por throttling.
+  static _net() {
+    if (!this.__net) this.__net = { last: 0, gap: 130 };
+    return this.__net;
+  }
+
+  async _httpGetJson(url, timeoutMs = 10000, extraHeaders = {}, _attempt = 1) {
+    const net = ArtworkService._net();
+    const wait = Math.max(0, net.last + net.gap - Date.now());
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    net.last = Date.now();
     return new Promise((resolve, reject) => {
       const httpMod = url.startsWith('https') ? https : http;
       const req = httpMod.get(
@@ -116,7 +128,17 @@ class ArtworkService {
         (res) => {
           let data = '';
           res.on('data', (c) => (data += c));
-          res.on('end', () => resolve({ status: res.statusCode, body: data }));
+          res.on('end', () => {
+            if (res.statusCode === 429 && _attempt < 3) {
+              setTimeout(() => {
+                this._httpGetJson(url, timeoutMs, extraHeaders, _attempt + 1)
+                  .then(resolve)
+                  .catch(reject);
+              }, 800 * _attempt);
+              return;
+            }
+            resolve({ status: res.statusCode, body: data });
+          });
         }
       );
       req.on('error', (err) => reject(err));

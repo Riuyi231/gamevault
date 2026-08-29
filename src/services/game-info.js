@@ -6,29 +6,47 @@ function warn(...args) {
   if (process.env.GAMEVAULT_DEBUG) console.warn('[GameInfo]', ...args);
 }
 
-function httpGetJson(url, timeoutMs = 10000) {
+// Pequeña cola global: separa las peticiones HTTP al menos `gap` ms entre sí y
+// reenvía los 429 (rate-limit de Wikipedia/Steam). Evita que un recargado de la
+// biblioteca en ráfaga haga que el fallback del idioma falle en unos juegos sí y
+// en otros no (mezcla de descripciones ES/EN por throttling).
+const NET = { last: 0, gap: 130, minRetry: 800 };
+function httpGetJson(url, timeoutMs = 10000, _attempt = 1) {
   return new Promise((resolve) => {
-    const mod = url.startsWith('https') ? https : http;
-    const req = mod.get(
-      url,
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 GameVault/1.0',
-          Accept: 'application/json'
+    const wait = Math.max(0, NET.last + NET.gap - Date.now());
+    const go = () => {
+      NET.last = Date.now();
+      const mod = url.startsWith('https') ? https : http;
+      const req = mod.get(
+        url,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 GameVault/1.0',
+            Accept: 'application/json'
+          },
+          timeout: timeoutMs
         },
-        timeout: timeoutMs
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (c) => (data += c));
-        res.on('end', () => resolve({ status: res.statusCode, body: data }));
-      }
-    );
-    req.on('error', () => resolve({ status: 0, body: '' }));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve({ status: 0, body: '' });
-    });
+        (res) => {
+          let data = '';
+          res.on('data', (c) => (data += c));
+          res.on('end', () => {
+            if (res.statusCode === 429 && _attempt < 3) {
+              setTimeout(() => {
+                httpGetJson(url, timeoutMs, _attempt + 1).then(resolve);
+              }, NET.minRetry * _attempt);
+              return;
+            }
+            resolve({ status: res.statusCode, body: data });
+          });
+        }
+      );
+      req.on('error', () => resolve({ status: 0, body: '' }));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ status: 0, body: '' });
+      });
+    };
+    setTimeout(go, wait);
   });
 }
 
@@ -69,7 +87,8 @@ class GameInfoService {
   }
 
   _steamParams() {
-    return this.locale === 'en' ? 'cc=us&l=english' : 'cc=es&l=espanol';
+    // Steam usa nombres de idioma en inglés: 'spanish', no 'espanol'.
+    return this.locale === 'en' ? 'cc=us&l=english' : 'cc=es&l=spanish';
   }
 
   setRawgKey(key) {
@@ -162,13 +181,24 @@ class GameInfoService {
   }
 
   /* ── Wikipedia (keyless, cualquier plataforma, descripción localizada) ── */
+  // ¿El texto es realmente (casi) todo en español? Compara marcadores ES contra
+  // marcadores EN en lugar de exigir un mínimo de aciertos en español, que
+  // descartaba descripciones cortas válidas ("es una obra maestra").
   _looksSpanish(text) {
-    const low = String(text || '').toLowerCase();
-    const markers = [' es ', ' el ', ' la ', ' los ', ' las ', ' un ', ' una ', ' de ', ' del ', ' en ', ' con ',
-      ' que ', ' por ', ' para ', ' está ', ' sobre ', ' jugador', ' mundo', ' juego', ' historia', ' puedes ', ' tu '];
-    let hits = 0;
-    for (const m of markers) if (low.includes(m)) hits++;
-    return hits >= 3;
+    const low = ` ${String(text || '').toLowerCase()} `;
+    const esMarkers = [
+      ' el ', ' la ', ' los ', ' las ', ' un ', ' una ', ' es un ', ' es una ', ' son ', ' del ', ' en ', ' con ',
+      ' que ', ' por ', ' para ', ' está ', ' sobre ', ' desarrollado por ', ' jugadores', ' puedes ', ' tu '
+    ];
+    const enMarkers = [
+      ' the ', ' and ', ' of ', ' to ', ' you ', ' your ', ' with ', ' for ', ' from ', ' is a ', ' are ', ' game ',
+      ' about ', ' have ', ' has ', ' gameplay ', ' experience ', ' control ', ' battle ', ' world '
+    ];
+    let es = 0;
+    let en = 0;
+    for (const m of esMarkers) if (low.includes(m)) es++;
+    for (const m of enMarkers) if (low.includes(m)) en++;
+    return es > en;
   }
 
   // En locale es: si los datos de Steam no vienen en español (juegos sin
