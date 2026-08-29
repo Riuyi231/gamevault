@@ -283,8 +283,9 @@ class GameInfoService {
       if (direct && this._looksLikeGame(direct)) {
         // Rechaza artículos poco relevantes (específicamente: sin imagen y con
         // extracto de diccionario) si existe una variante mejor en `fetched`.
-        this.cache.set(cacheKey, direct);
-        return direct;
+        const done = await this._finalizeWiki(direct);
+        this.cache.set(cacheKey, done);
+        return done;
       }
       const { status, body } = await httpGetJson(
         `https://${lang}.wikipedia.org/api/rest_v1/search/page?q=${encodeURIComponent(name)}&limit=3`,
@@ -303,8 +304,9 @@ class GameInfoService {
       }
       const chosen = best(alt);
       if (chosen) {
-        this.cache.set(cacheKey, chosen);
-        return chosen;
+        const done = await this._finalizeWiki(chosen);
+        this.cache.set(cacheKey, done);
+        return done;
       }
     } catch {
       return null;
@@ -355,6 +357,88 @@ class GameInfoService {
       return appid;
     } catch {
       return null;
+    }
+  }
+
+  // Enriquecimiento del resultado de Wikipedia sin clave: imágenes del artículo
+  // como capturas + año de lanzamiento inferido del primer párrafo.
+  async _finalizeWiki(item) {
+    if (!item) return item;
+    if (!item.screenshots || item.screenshots.length === 0) {
+      try {
+        const imgs = await this._wikiMediaImages(item.wikiTitle || item.name, this._rawgLang());
+        if (imgs && imgs.length) item.screenshots = imgs;
+      } catch {
+        /* keep empty */
+      }
+    }
+    if (!item.releaseDate) {
+      const head =
+        String(item.about || item.detailedDescription || '').slice(0, 200) +
+        ' ' +
+        String((item.genres && item.genres[0]) || '');
+      const year = head.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
+      if (year) item.releaseDate = year[0];
+    }
+    return item;
+  }
+
+  // Lista de imágenes del artículo de Wikipedia (API de MediaWiki, sin clave).
+  // Filtra logos/portadas y devuelve thumbnails anchos (1280px) a modo de capturas.
+  async _wikiMediaImages(title, lang) {
+    if (!title || !lang) return [];
+    const cacheKey = `wikimedia:${lang}:${String(title).toLowerCase().trim()}`;
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+    const none = () => {
+      this.cache.set(cacheKey, []);
+      return [];
+    };
+
+    const download = async (tryLang) => {
+      const { status, body } = await httpGetJson(
+        `https://${tryLang}.wikipedia.org/w/api.php?action=query&prop=images&format=json&imlimit=50&origin=*` +
+          `&titles=${encodeURIComponent(String(title).replace(/ /g, '_'))}`,
+        8000
+      );
+      if (status !== 200) return [];
+      const data = JSON.parse(body);
+      const pages = data.query && data.query.pages ? Object.values(data.query.pages) : [];
+      if (!pages[0] || pages[0].missing || !pages[0].images) return [];
+
+      const junk = /logo|icon|cover|portada|banner|caja.?art|caratula|mapa|emblema|artwork|poster|_logo|key.?art|sello/i;
+      const screenshotLike = /(screenshot|captura|jugabilidad|gameplay|game.{0,2}shot|en.?juego|gameplay_image|_shot)/i;
+      const pool = pages[0].images
+        .map((f) => f.title)
+        .filter((name) => /\.(jpe?g|png)$/i.test(name) && !junk.test(name))
+        .map((name) => ({ name, like: screenshotLike.test(name) ? 1 : 0 }))
+        .sort((a, b) => b.like - a.like)
+        .slice(0, 6);
+      if (pool.length < 2) return [];
+
+      const { status: s2, body: b2 } = await httpGetJson(
+        `https://${tryLang}.wikipedia.org/w/api.php?action=query&prop=imageinfo&iiprop=url&iiurlwidth=1280&format=json&origin=*` +
+          `&titles=${encodeURIComponent(pool.map((p) => p.name).join('|'))}`,
+        8000
+      );
+      if (s2 !== 200) return [];
+      const data2 = JSON.parse(b2);
+      const urls = [];
+      const pages2 = data2.query && data2.query.pages ? data2.query.pages : {};
+      for (const page of Object.values(pages2)) {
+        const ii = page.imageinfo && page.imageinfo[0];
+        if (ii && ii.thumburl) urls.push(ii.thumburl);
+      }
+      return urls;
+    };
+
+    try {
+      let urls = await download(lang);
+      if (urls.length === 0 && lang !== 'en') urls = await download('en');
+      if (urls.length === 0) return none();
+      this.cache.set(cacheKey, urls);
+      return urls;
+    } catch {
+      return none();
     }
   }
 

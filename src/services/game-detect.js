@@ -402,9 +402,9 @@ class GameDetector {
 
       const best = (list) => list.reduce((acc, item) => (score(item) > score(acc) ? item : acc), list[0]);
 
-      if (topLevel.length > 0) return best(topLevel);
-      if (nearTop.length > 0) return best(nearTop);
-      return best(deeper);
+      if (topLevel.length > 0) return String(best(topLevel)).trim();
+      if (nearTop.length > 0) return String(best(nearTop)).trim();
+      return String(best(deeper)).trim();
     } catch {
       return '';
     }

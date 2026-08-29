@@ -90,51 +90,103 @@ function tickPlaySessions() {
 
 /* ─────────────────────────── LAUNCHING ─────────────────────────── */
 
+// Spawns a process capturing failure both synchronously and via the 'error'
+// event. WINDOWS NOTE: spawn can fail asynchronously (EACCES/ENOENT with a weird
+// path); without an 'error' listener the ChildProcess throws and Electron opens
+// the "A JavaScript error occurred in the main process" dialog.
+function launchChild(exe, args, opts) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let child;
+    try {
+      child = spawn(exe, args, opts);
+    } catch (err) {
+      resolve({ ok: false, error: err.message });
+      return;
+    }
+    const settleFail = (err) => {
+      if (settled) return;
+      settled = true;
+      logError('Launch failed:', err);
+      resolve({ ok: false, error: err.message });
+    };
+    child.once('error', settleFail);
+    child.once('spawn', () => {
+      if (settled) return;
+      settled = true;
+      child.removeListener('error', settleFail);
+      child.on('error', (err) => logError('Child process error:', err));
+      resolve({ ok: true, pid: child.pid, child });
+    });
+    child.unref();
+  });
+}
+
+// Reconciles a stored exePath with reality: trims whitespace and retries with
+// the clean basename inside installDir (stored paths can carry a stray leading
+// space, p.ej. "D:\Genshin Impact game\ GenshinImpact.exe").
+function resolveExe(exePath, installDir) {
+  let p = String(exePath || '').trim();
+  if (p && fs.existsSync(p)) return p;
+  if (p && installDir) {
+    const base = path.basename(p).trim();
+    if (base && base !== path.basename(p)) {
+      const dir = String(installDir).replace(/[\\/]$/, '');
+      const candidate = path.join(dir, base);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return p;
+}
+
 // Starts a game's process (native exe, emulator+ROM or launcher URI) and starts
 // a playtime session. Returns { success, viaLauncher, pid } or { success:false, error }.
-function openGameProcess(game) {
+async function openGameProcess(game) {
   const id = game.id;
 
   // Emulador + ROM (juegos retro)
   if (game.romPath) {
     const emuPath = game.exePath || '';
     if (emuPath && fs.existsSync(emuPath)) {
-      try {
-        const args = [];
-        if (game.emulatorArgs) args.push(...splitArgs(game.emulatorArgs));
-        args.push(game.romPath);
-        const cwd = path.dirname(emuPath);
-        const child = spawn(emuPath, args, { cwd, detached: true, stdio: 'ignore' });
-        child.unref();
-        gameStore.updateGame(id, { lastPlayed: Date.now(), exePath: emuPath });
-        startPlaySession(game, child.pid);
-        log('Launched (retro):', game.name, emuPath, '->', game.romPath);
-        return { success: true, pid: child.pid };
-      } catch (err) {
-        return { success: false, error: err.message };
-      }
+      const args = [];
+      if (game.emulatorArgs) args.push(...splitArgs(game.emulatorArgs));
+      args.push(game.romPath);
+      const launched = await launchChild(emuPath, args, {
+        cwd: path.dirname(emuPath),
+        detached: true,
+        stdio: 'ignore'
+      });
+      if (!launched.ok) return { success: false, error: launched.error };
+      gameStore.updateGame(id, { lastPlayed: Date.now(), exePath: emuPath });
+      startPlaySession(game, launched.pid);
+      log('Launched (retro):', game.name, emuPath, '->', game.romPath);
+      return { success: true, pid: launched.pid };
     }
     return { success: false, error: t('main.emuNotFound') };
   }
 
   // Xbox / Game Pass (MSIX) apps launch via their AUMID through Explorer.
   if (game.aumid) {
-    try {
-      const child = spawn('explorer.exe', ['shell:AppsFolder\\' + game.aumid], { windowsHide: true });
-      child.unref();
-      gameStore.updateGame(id, { lastPlayed: Date.now() });
-      startPlaySession(game, null, true);
-      log('Launched Xbox app:', game.name, game.aumid);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+    const launched = await launchChild(
+      'explorer.exe',
+      ['shell:AppsFolder\\' + game.aumid],
+      { windowsHide: true }
+    );
+    if (!launched.ok) return { success: false, error: launched.error };
+    gameStore.updateGame(id, { lastPlayed: Date.now() });
+    startPlaySession(game, null, true);
+    log('Launched Xbox app:', game.name, game.aumid);
+    return { success: true };
   }
 
-  let exePath = game.exePath;
+  let exePath = game.exePath
+    ? resolveExe(game.exePath, game.installDir || path.dirname(game.exePath))
+    : '';
   if (!exePath && game.installDir) {
     exePath = gameDetector._findMainExe(game.installDir);
     if (exePath) gameStore.updateGame(id, { exePath });
+  } else if (exePath && exePath !== game.exePath) {
+    gameStore.updateGame(id, { exePath });
   }
 
   // Juegos de Epic cuyo ejecutable es el bootstrap/launcher (p.ej. Fortnite):
@@ -145,17 +197,16 @@ function openGameProcess(game) {
   }
 
   if (exePath && fs.existsSync(exePath)) {
-    try {
-      const cwd = game.installDir || path.dirname(exePath);
-      const child = spawn(exePath, [], { cwd, detached: true, stdio: 'ignore' });
-      child.unref();
-      gameStore.updateGame(id, { lastPlayed: Date.now() });
-      startPlaySession(game, child.pid);
-      log('Launched:', game.name, exePath);
-      return { success: true, pid: child.pid };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+    const launched = await launchChild(exePath, [], {
+      cwd: game.installDir || path.dirname(exePath),
+      detached: true,
+      stdio: 'ignore'
+    });
+    if (!launched.ok) return { success: false, error: launched.error };
+    gameStore.updateGame(id, { lastPlayed: Date.now() });
+    startPlaySession(game, launched.pid);
+    log('Launched:', game.name, exePath);
+    return { success: true, pid: launched.pid };
   }
 
   if (game.launchUri) {
@@ -452,7 +503,7 @@ function setupIPC() {
     const game = gameStore.getGame(id);
     if (!game) return { ok: false, error: t('main.gameNotFound') };
 
-    const launched = openGameProcess(game);
+    const launched = await openGameProcess(game);
     if (!launched || !launched.success) {
       return { ok: false, error: launched && launched.error ? launched.error : t('main.launchFailed') };
     }
