@@ -10,7 +10,7 @@ function warn(...args) {
 // reenvía los 429 (rate-limit de Wikipedia/Steam). Evita que un recargado de la
 // biblioteca en ráfaga haga que el fallback del idioma falle en unos juegos sí y
 // en otros no (mezcla de descripciones ES/EN por throttling).
-const NET = { last: 0, gap: 130, minRetry: 800 };
+const NET = { last: 0, gap: 110, minRetry: 800 };
 function httpGetJson(url, timeoutMs = 10000, _attempt = 1) {
   return new Promise((resolve) => {
     const wait = Math.max(0, NET.last + NET.gap - Date.now());

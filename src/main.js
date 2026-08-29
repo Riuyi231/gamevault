@@ -541,6 +541,55 @@ function startPeriodicRescan() {
   }, SCAN_INTERVAL);
 }
 
+/* ─────────────────────────── INFO (caché + prefetch) ─────────────────────────── */
+
+const INFO_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 días
+
+// Comparte la petición de info por juego (evita duplicar fetch si el prefetch ya
+// está descargándolo) y la persiste para que la siguiente apertura sea instantánea.
+const infoPromises = new Map();
+function getOrFetchInfo(id, game) {
+  if (infoPromises.has(id)) return infoPromises.get(id);
+  const p = gameInfoService
+    .fetchForGame({ id, name: game.name, appId: game.appId })
+    .then((info) => {
+      if (info && (info.detailedDescription || info.shortDescription)) {
+        gameStore.setInfoCache(id, info);
+      }
+      return info;
+    })
+    .finally(() => infoPromises.delete(id));
+  infoPromises.set(id, p);
+  return p;
+}
+
+function isCacheFresh(id, game) {
+  const c = gameStore.getInfoCache(id);
+  if (!c) return false;
+  if (Date.now() - c.savedAt >= INFO_CACHE_TTL) return false;
+  if (c.name && game.name && c.name !== game.name) return false;
+  return true;
+}
+
+// Precalienta las fichas en segundo plano (3 en paralelo como mucho; el throttle
+// interno de las fuentes ya espacia las peticiones para no tocar rate-limits).
+function prewarmGameInfo() {
+  const games = gameStore.getGames();
+  let i = 0;
+  const worker = async () => {
+    while (i < games.length) {
+      const g = games[i++];
+      if (!g || isCacheFresh(g.id, g)) continue;
+      try {
+        await getOrFetchInfo(g.id, g);
+      } catch {
+        // ignore
+      }
+    }
+  };
+  for (let w = 0; w < 3; w++) worker();
+}
+
 /* ─────────────────────────── IPC ─────────────────────────── */
 
 function setupIPC() {
@@ -862,7 +911,8 @@ function setupIPC() {
   ipcMain.handle('get-game-info', async (event, game) => {
     if (!game) return null;
     try {
-      const info = await gameInfoService.fetchForGame(game);
+      if (isCacheFresh(game.id, game)) return gameStore.getInfoCache(game.id).info;
+      const info = await getOrFetchInfo(game.id, game);
       // Persiste portada y banner panorámico obtenidos de internet (RAWG,
       // Steam o Wikipedia) para que sobrevivan al siguiente análisis.
       if (info && game.id) {
@@ -1124,6 +1174,9 @@ app.whenReady().then(async () => {
 
   setTimeout(() => enrichEmulatorCovers(), 1200);
   setTimeout(() => runScan(), 150);
+  // Precarga la información de los juegos en segundo plano (caché persistente)
+  // para que las fichas se abran al instante, sin esperas de red visibles.
+  setTimeout(prewarmGameInfo, 4000);
 });
 
 app.on('before-quit', () => {

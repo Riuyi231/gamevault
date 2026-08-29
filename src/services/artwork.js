@@ -104,7 +104,7 @@ class ArtworkService {
   // reintenta los 429 (rate-limit) con backoff. Evita que las portadas/capturas
   // de unos juegos salgan y las de otros no por throttling.
   static _net() {
-    if (!this.__net) this.__net = { last: 0, gap: 130 };
+    if (!this.__net) this.__net = { last: 0, gap: 110 };
     return this.__net;
   }
 
@@ -200,8 +200,12 @@ class ArtworkService {
   }
 
   async searchGame(gameName) {
+    if (!gameName) return [];
+    // Caché en memoria: repetir el modal de portada del mismo juego es instantáneo.
+    this.searchCache = this.searchCache || new Map();
+    const cacheKey = String(gameName).toLowerCase().trim();
+    if (this.searchCache.has(cacheKey)) return this.searchCache.get(cacheKey);
     const results = [];
-    if (!gameName) return results;
     const normalized = normalize(gameName);
 
     const overrideIds = new Set();
@@ -212,53 +216,35 @@ class ArtworkService {
       }
     }
 
-    // 1) RAWG (multi-platform) — find matches by name, pull covers from RAWG + SteamGridDB
-    try {
-      const rawgMatches = await this._searchRawg(gameName);
-      for (const m of rawgMatches) {
-        if (!results.some((r) => r.url === m.url)) results.push(m);
-      }
-    } catch {
-      // ignore
-    }
+    // Todas las fuentes en paralelo (la cola del servicio ya las espacia);
+    // después se fusionan en el mismo orden que antes (rawg → sgdb → steam → wiki).
+    const [rawgR, steamR, sgdbR, wikiR] = await Promise.allSettled([
+      this._searchRawg(gameName),
+      this._searchSteamStore(gameName),
+      this._searchSteamGridDB(gameName),
+      this._searchWikipedia(gameName)
+    ]);
+    const rawg = (rawgR.status === 'fulfilled' ? rawgR.value : null) || [];
+    const steam = (steamR.status === 'fulfilled' ? steamR.value : null) || [];
+    const sgdb = (sgdbR.status === 'fulfilled' ? sgdbR.value : null) || [];
+    const wiki = (wikiR.status === 'fulfilled' ? wikiR.value : null) || [];
+    const push = (m) => {
+      if (m && !results.some((r) => r.url === m.url)) results.push(m);
+    };
 
-    // 2) SteamGridDB covers (works for Epic/GOG/custom, not only Steam)
-    if (results.length === 0) {
-      try {
-        results.push(...(await this._searchSteamGridDB(gameName)));
-      } catch {
-        // ignore
-      }
-    }
-
-    // 3) Steam store as fallback
-    try {
-      const steamResults = await this._searchSteamStore(gameName);
-      for (const r of steamResults) {
-        if (!results.some((x) => x.url === r.url)) results.push(r);
-      }
-    } catch {
-      // ignore
-    }
-
-    // 4) Wikipedia (sin clave): imagen real de cualquier juego, incluso si no
-    //    está en Steam ni requiere clave de RAWG/SGDB.
-    if (results.length === 0) {
-      try {
-        results.push(...(await this._searchWikipedia(gameName)));
-      } catch {
-        // ignore
-      }
-    }
+    for (const m of rawg) push(m);
+    if (results.length === 0) for (const m of sgdb) push(m);
+    for (const r of steam) push(r);
+    if (results.length === 0) for (const m of wiki) push(m);
 
     if (results.length === 0) {
-      for (const appid of overrideIds) {
-        const cover = this._steamStaticCover(appid);
-        if (!results.some((r) => r.url === cover.url)) results.push(cover);
-      }
+      for (const appid of overrideIds) push(this._steamStaticCover(appid));
     }
 
-    return results.slice(0, 12);
+    const out = results.slice(0, 12);
+    if (this.searchCache.size > 300) this.searchCache.clear();
+    this.searchCache.set(cacheKey, out);
+    return out;
   }
 
   // Logo/portada real del emulador o consola vía Wikipedia (sin clave).

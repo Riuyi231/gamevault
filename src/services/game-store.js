@@ -23,6 +23,7 @@ class GameStore {
       games: [],
       customFolders: [],
       emulators: [],
+      infoCache: {},
       lastScan: 0,
       settings: { ...DEFAULT_SETTINGS }
     };
@@ -51,6 +52,7 @@ class GameStore {
         games: Array.isArray(raw.games) ? raw.games : [],
         customFolders: Array.isArray(raw.customFolders) ? raw.customFolders : [],
         emulators: Array.isArray(raw.emulators) ? raw.emulators : [],
+        infoCache: raw.infoCache && typeof raw.infoCache === 'object' ? raw.infoCache : {},
         settings: { ...DEFAULT_SETTINGS, ...(raw.settings || {}) }
       };
     } catch {
@@ -92,7 +94,12 @@ class GameStore {
     const before = this.getGames().length;
     this._data.games = this.getGames().filter((g) => g.id !== id);
     const removed = this.getGames().length !== before;
-    if (removed) this._save();
+    if (removed) {
+      if (this._data.infoCache && this._data.infoCache[id]) {
+        delete this._data.infoCache[id];
+      }
+      this._save();
+    }
     return removed;
   }
 
@@ -261,6 +268,32 @@ class GameStore {
     this._data.settings = { ...this.getSettings(), ...settings };
     this._save();
     return this.getSettings();
+  }
+
+  /* ─── INFO CACHE (persistente: fichas que se abren al instante) ─── */
+
+  _cloneInfo(info) {
+    try {
+      return JSON.parse(JSON.stringify(info));
+    } catch {
+      return null;
+    }
+  }
+
+  getInfoCache(id) {
+    if (!id) return null;
+    const c = (this._data.infoCache || {})[id];
+    return c && c.info ? c : null;
+  }
+
+  setInfoCache(id, info, savedAt = Date.now()) {
+    if (!id || !info) return false;
+    const clone = this._cloneInfo(info);
+    if (!clone) return false;
+    if (!this._data.infoCache) this._data.infoCache = {};
+    this._data.infoCache[id] = { savedAt, name: clone.name || '', info: clone };
+    this._save();
+    return true;
   }
 
   /* ─── SCAN METADATA ─── */
