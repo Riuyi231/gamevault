@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const api = {
   getGames: () => ipcRenderer.invoke('get-games'),
   launchGame: (id) => ipcRenderer.invoke('launch-game', id),
+  captureGameplay: (id) => ipcRenderer.invoke('capture-gameplay', id),
   rescan: () => ipcRenderer.invoke('rescan'),
   addGame: (data) => ipcRenderer.invoke('add-game', data),
   removeGame: (id) => ipcRenderer.invoke('remove-game', id),

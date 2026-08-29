@@ -127,6 +127,15 @@
           </nav>
         </div>
 
+        <div class="sidebar-section">
+          <div class="sidebar-label">Consolas</div>
+          <button class="filter-btn" id="consoles-btn" title="Dashboard de consolas" data-filter="" aria-pressed="false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M1.5 12h3M19.5 12h3M12 1.5v3M12 19.5v3" stroke-linecap="round"/></svg>
+            <span class="filter-label">Consolas</span>
+            <span class="filter-count" id="consoles-count">0</span>
+          </button>
+        </div>
+
         <div class="sidebar-section grow">
           <div class="sidebar-label">Carpetas</div>
           <div class="folders-header">
@@ -166,6 +175,10 @@
             <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="text" id="search-input" placeholder="Buscar juegos..." autocomplete="off" spellcheck="false">
             <kbd class="search-kbd">Ctrl+F</kbd>
+          </div>
+          <div class="filter-chip hidden" id="filter-chip" title="Filtro activo">
+            <span class="filter-chip-label" id="filter-chip-label"></span>
+            <button class="filter-chip-clear" id="filter-chip-clear" title="Quitar filtro (Mostrar todas)" aria-label="Quitar filtro">×</button>
           </div>
           <div class="toolbar">
             <select id="sort-select" title="Ordenar">
@@ -274,6 +287,10 @@
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                   <span>Cambiar portada</span>
                 </button>
+                <button class="gp-link" id="gp-capture" title="Lanza el juego y guarda una foto real como portada">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  <span>Capturar gameplay</span>
+                </button>
               </div>
               <div class="gp-meta" id="gp-meta"></div>
             </div>
@@ -292,6 +309,26 @@
       </section>
     </div>
   </div>
+
+  <!-- ═══════════ CONSOLES DASHBOARD ═══════════ -->
+  <section id="consoles-view" aria-hidden="true">
+    <div class="consoles-topbar">
+      <button class="gp-back" id="consoles-back">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>Biblioteca</span>
+      </button>
+      <span class="gp-topbar-label">Consolas</span>
+      <div class="gp-topbar-spacer"></div>
+    </div>
+    <div class="consoles-scroll">
+      <div class="consoles-head">
+        <span class="consoles-eyebrow">Dashboard</span>
+        <h2>Biblioteca por consolas</h2>
+        <p>Explora tus juegos por plataforma. Haz clic en una consola para ver sus juegos; las consolas empaquetadas con ROMs pendientes también aparecen aquí.</p>
+      </div>
+      <div id="consoles-grid" class="consoles-grid"></div>
+    </div>
+  </section>
 
   <!-- ═══════════ SETTINGS DRAWER ═══════════ -->
   <div id="settings-drawer" class="hidden">

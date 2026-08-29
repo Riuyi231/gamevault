@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, Notification, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn, spawnSync } = require('child_process');
@@ -26,6 +26,9 @@ let watcher = null;
 let currentScan = null;
 let periodicTimer = null;
 let rescansSinceScan = 0;
+let tray = null;
+let quitting = false;
+let updateDownloadedFor = null;
 
 const log = (...args) => console.log('[GameVault]', ...args);
 const logError = (...args) => console.error('[GameVault]', ...args);
@@ -68,6 +71,92 @@ function tickPlaySessions() {
       }
     }
     if (!alive) endPlaySession(id, now);
+  }
+}
+
+/* ─────────────────────────── LAUNCHING ─────────────────────────── */
+
+// Starts a game's process (native exe, emulator+ROM or launcher URI) and starts
+// a playtime session. Returns { success, viaLauncher, pid } or { success:false, error }.
+function openGameProcess(game) {
+  const id = game.id;
+
+  let exePath = game.exePath;
+  if (!exePath && game.installDir) {
+    exePath = gameDetector._findMainExe(game.installDir);
+    if (exePath) gameStore.updateGame(id, { exePath });
+  }
+
+  // Emulador + ROM (juegos retro)
+  if (game.romPath) {
+    const emuPath = game.exePath || '';
+    if (emuPath && fs.existsSync(emuPath)) {
+      try {
+        const args = [];
+        if (game.emulatorArgs) args.push(...splitArgs(game.emulatorArgs));
+        args.push(game.romPath);
+        const cwd = path.dirname(emuPath);
+        const child = spawn(emuPath, args, { cwd, detached: true, stdio: 'ignore' });
+        child.unref();
+        gameStore.updateGame(id, { lastPlayed: Date.now(), exePath: emuPath });
+        startPlaySession(game, child.pid);
+        log('Launched (retro):', game.name, emuPath, '->', game.romPath);
+        return { success: true, pid: child.pid };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    }
+    return { success: false, error: 'Emulador no encontrado' };
+  }
+
+  if (exePath && fs.existsSync(exePath)) {
+    try {
+      const cwd = game.installDir || path.dirname(exePath);
+      const child = spawn(exePath, [], { cwd, detached: true, stdio: 'ignore' });
+      child.unref();
+      gameStore.updateGame(id, { lastPlayed: Date.now() });
+      startPlaySession(game, child.pid);
+      log('Launched:', game.name, exePath);
+      return { success: true, pid: child.pid };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  if (game.launchUri) {
+    try {
+      shell.openExternal(game.launchUri);
+      gameStore.updateGame(id, { lastPlayed: Date.now() });
+      startPlaySession(game, null, true);
+      log('Launched via launcher URI:', game.name, game.launchUri);
+      return { success: true, viaLauncher: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  return { success: false, error: 'Ejecutable no encontrado' };
+}
+
+// Captures the primary screen and stores it as a PNG for a game's real-gameplay cover.
+async function captureScreenToFile(gameId) {
+  const capturesDir = path.join(app.getPath('userData'), 'captures');
+  fs.mkdirSync(capturesDir, { recursive: true });
+  const filePath = path.join(capturesDir, `${gameId}-${Date.now()}.png`);
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1600, height: 900 }
+    });
+    if (!sources || sources.length === 0) return { ok: false, error: 'No hay pantalla para capturar' };
+    const primary = sources.find((s) => s.display_id === '0') || sources[0];
+    const image = primary.thumbnail;
+    if (!image || image.isEmpty()) return { ok: false, error: 'No se pudo obtener la imagen' };
+    fs.writeFileSync(filePath, image.toPNG());
+    return { ok: true, localCoverPath: filePath };
+  } catch (err) {
+    logError('Screen capture failed:', err);
+    return { ok: false, error: 'Falló la captura de pantalla' };
   }
 }
 
@@ -131,6 +220,14 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // Cerrar la ventana con la X minimiza a bandeja (menos en salida real).
+  mainWindow.on('close', (e) => {
+    if (!quitting) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -144,9 +241,11 @@ function createWindow() {
     logError('Renderer process gone:', details.reason, details.exitCode);
   });
 
-  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+  mainWindow.webContents.on('console-message', (event, details) => {
+    const level = details && details.level !== undefined ? details.level : 0;
+    const message = details && details.message ? details.message : '';
     if (level >= 2) {
-      logError(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+      logError(`[renderer:${level}] ${message}`);
     }
   });
 }
@@ -303,62 +402,33 @@ function setupIPC() {
   ipcMain.handle('launch-game', async (event, id) => {
     const game = gameStore.getGame(id);
     if (!game) return { success: false, error: 'Juego no encontrado' };
+    return openGameProcess(game);
+  });
 
-    let exePath = game.exePath;
-    if (!exePath && game.installDir) {
-      exePath = gameDetector._findMainExe(game.installDir);
-      if (exePath) gameStore.updateGame(id, { exePath });
+  ipcMain.handle('capture-gameplay', async (event, id) => {
+    const game = gameStore.getGame(id);
+    if (!game) return { ok: false, error: 'Juego no encontrado' };
+
+    const launched = openGameProcess(game);
+    if (!launched || !launched.success) {
+      return { ok: false, error: launched && launched.error ? launched.error : 'No se pudo lanzar el juego' };
+    }
+    if (launched.viaLauncher) {
+      return { ok: false, error: 'No se puede capturar un juego de launcher externo' };
     }
 
-    // Emulador + ROM (juegos retro)
-    if (game.romPath) {
-      const emuPath = game.exePath || '';
-      if (emuPath && fs.existsSync(emuPath)) {
-        try {
-          const args = [];
-          if (game.emulatorArgs) args.push(...splitArgs(game.emulatorArgs));
-          args.push(game.romPath);
-          const cwd = path.dirname(emuPath);
-          const child = spawn(emuPath, args, { cwd, detached: true, stdio: 'ignore' });
-          child.unref();
-          gameStore.updateGame(id, { lastPlayed: Date.now(), exePath: emuPath });
-          startPlaySession(game, child.pid);
-          log('Launched (retro):', game.name, emuPath, '->', game.romPath);
-          return { success: true };
-        } catch (err) {
-          return { success: false, error: err.message };
-        }
-      }
-      return { success: false, error: 'Emulador no encontrado' };
-    }
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
+    } catch { /* ignore */ }
 
-    if (exePath && fs.existsSync(exePath)) {
-      try {
-        const cwd = game.installDir || path.dirname(exePath);
-        const child = spawn(exePath, [], { cwd, detached: true, stdio: 'ignore' });
-        child.unref();
-        gameStore.updateGame(id, { lastPlayed: Date.now() });
-        startPlaySession(game, child.pid);
-        log('Launched:', game.name, exePath);
-        return { success: true };
-      } catch (err) {
-        return { success: false, error: err.message };
-      }
-    }
+    await new Promise((resolve) => setTimeout(resolve, 8000));
 
-    if (game.launchUri) {
-      try {
-        shell.openExternal(game.launchUri);
-        gameStore.updateGame(id, { lastPlayed: Date.now() });
-        startPlaySession(game, null, true);
-        log('Launched via launcher URI:', game.name, game.launchUri);
-        return { success: true, viaLauncher: true };
-      } catch (err) {
-        return { success: false, error: err.message };
-      }
-    }
+    const shot = await captureScreenToFile(id);
+    if (!shot.ok) return shot;
 
-    return { success: false, error: 'Ejecutable no encontrado' };
+    gameStore.updateGame(id, { hasLocalCover: true, localCoverPath: shot.localCoverPath });
+    log('Captured gameplay for:', game.name, '->', shot.localCoverPath);
+    return { ok: true, localCoverPath: shot.localCoverPath };
   });
 
   ipcMain.handle('rescan', async () => {
@@ -718,8 +788,19 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    log('AutoUpdate: descarga completada', info && info.version);
-    sendUpdateStatus({ type: 'downloaded', version: info && info.version });
+    const version = info && info.version;
+    log('AutoUpdate: descarga completada', version);
+    updateDownloadedFor = version;
+    sendUpdateStatus({ type: 'downloaded', version });
+    rebuildTrayMenu();
+    try {
+      new Notification({
+        title: 'GameVault actualizado',
+        body: `La versión ${version || 'nueva'} está lista. Reinicia la app para instalarla.`
+      }).show();
+    } catch (err) {
+      logError('Notification failed:', err);
+    }
   });
 
   autoUpdater.on('error', (err) => {
@@ -730,11 +811,114 @@ function setupAutoUpdater() {
     });
   });
 
-  setTimeout(() => {
+  const checkOnce = () => {
     autoUpdater.checkForUpdates().catch((err) => {
       logError('AutoUpdate: comprobación fallida', err && (err.message || err));
     });
-  }, 15000);
+  };
+  setTimeout(checkOnce, 15000);
+  setInterval(checkOnce, 3600 * 1000);
+}
+
+/* ─────────────────────────── TRAY ─────────────────────────── */
+
+function trayIconPath() {
+  const candidates = app.isPackaged
+    ? [path.join(process.resourcesPath, 'app.asar', 'icon.ico'), path.join(process.resourcesPath, 'icon.ico')]
+    : [path.join(__dirname, '..', 'icon.ico'), path.join(__dirname, '..', 'assets', 'icon.ico')];
+  return candidates.find((p) => fs.existsSync(p)) || path.join(__dirname, '..', 'icon.ico');
+}
+
+function toggleMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isVisible()) {
+    mainWindow.hide();
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+async function checkUpdatesNow() {
+  if (!updaterService) return;
+  try {
+    const info = await updaterService.checkForUpdates();
+    if (!info || !info.hasUpdate) {
+      sendUpdateStatus({ type: 'not-available' });
+      try {
+        new Notification({ title: 'GameVault al día', body: 'No hay actualizaciones disponibles.' }).show();
+      } catch { /* ignore */ }
+      return;
+    }
+    sendUpdateStatus({ type: 'available', version: info.latestVersion });
+    if (app.isPackaged) {
+      autoUpdater.downloadUpdate().catch((err) => {
+        logError('AutoUpdate: descarga fallida', err && (err.message || err));
+      });
+    } else {
+      try {
+        new Notification({
+          title: 'Nueva versión de GameVault',
+          body: `${info.latestVersion} disponible. Descárgala en la página de lanzamientos.`
+        }).show();
+      } catch { /* ignore */ }
+    }
+  } catch (err) {
+    logError('Check updates failed:', err);
+  }
+}
+
+function rebuildTrayMenu() {
+  if (!tray) return;
+  const hasUpdate = !!updateDownloadedFor;
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Abrir / Cerrar GameVault',
+      click: toggleMainWindow
+    },
+    { type: 'separator' },
+    {
+      label: 'Buscar actualizaciones',
+      click: () => checkUpdatesNow()
+    },
+    {
+      label: updateDownloadedFor
+        ? `Reiniciar e instalar ${updateDownloadedFor}`
+        : 'Reiniciar e instalar actualización',
+      enabled: hasUpdate,
+      click: () => {
+        if (app.isPackaged) {
+          quitting = true;
+          autoUpdater.quitAndInstall(false, true);
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Salir',
+      click: () => {
+        quitting = true;
+        app.quit();
+      }
+    }
+  ]);
+  tray.setContextMenu(menu);
+}
+
+function setupTray() {
+  if (tray) return;
+  try {
+    tray = new Tray(trayIconPath());
+    tray.setToolTip('GameVault');
+    tray.on('click', toggleMainWindow);
+    tray.on('double-click', toggleMainWindow);
+    rebuildTrayMenu();
+  } catch (err) {
+    logError('Tray init failed:', err);
+  }
 }
 
 /* ─────────────────────────── LIFECYCLE ─────────────────────────── */
@@ -766,6 +950,7 @@ app.whenReady().then(async () => {
 
   createWindow();
   setupIPC();
+  setupTray();
   startPeriodicRescan();
   setupAutoUpdater();
 
@@ -775,11 +960,13 @@ app.whenReady().then(async () => {
 });
 
 app.on('before-quit', () => {
+  quitting = true;
   const now = Date.now();
   for (const id of Array.from(playSessions.keys())) endPlaySession(id, now);
 });
 
 app.on('window-all-closed', () => {
+  if (!quitting) return; // minimizar a bandeja en lugar de salir
   if (watcher) {
     try {
       watcher.close();

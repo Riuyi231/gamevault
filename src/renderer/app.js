@@ -70,7 +70,8 @@
     splashFinishTimer: null,
     detailCache: new Map(),
     arcade: false,
-    arcadeIndex: -1
+    arcadeIndex: -1,
+    consolesOpen: false
   };
 
   const GAMEPAD = {
@@ -229,10 +230,16 @@
   function setFilter(filter) {
     state.filter = filter;
     $$('.filter-btn').forEach((b) => b.classList.toggle('active', b.dataset.filter === filter));
+    const chipLabel = filter === 'all' ? '' : (PLATFORM_LABELS[filter] || filter);
+    $('#filter-chip').classList.toggle('hidden', !chipLabel);
+    $('#filter-chip-label').textContent = chipLabel;
     applyVisible();
   }
 
+  $('#filter-chip-clear').addEventListener('click', () => setFilter('all'));
+
   $$('.filter-btn').forEach((btn) => {
+    if (btn.id === 'consoles-btn') return;
     btn.addEventListener('click', () => setFilter(btn.dataset.filter));
   });
 
@@ -1238,6 +1245,107 @@
   });
   $('#arcade-exit').addEventListener('click', closeArcade);
 
+  /* ═══════════════ CONSOLES DASHBOARD ═══════════════ */
+  function consoleGroups() {
+    const map = new Map();
+    for (const g of state.allGames || []) {
+      let key, label;
+      if (g.source === 'retro') {
+        key = 'c:' + (g.platform || 'Retro');
+        label = g.platform || 'Retro';
+      } else {
+        key = 'p:' + platformKeyOf(g);
+        label = PLATFORM_LABELS[platformKeyOf(g)] || key;
+      }
+      const e = map.get(key) || { key, filter: key.slice(2), label, count: 0, playtimeMs: 0, lastPlayed: 0 };
+      if (!map.has(key)) map.set(key, e);
+      e.count += 1;
+      e.playtimeMs += (g.playtimeMs || 0);
+      if ((g.lastPlayed || 0) > e.lastPlayed) e.lastPlayed = g.lastPlayed;
+    }
+    for (const emu of state.emulators || []) {
+      const key = 'c:' + (emu.console || 'Retro');
+      if (!map.has(key)) {
+        map.set(key, { key, filter: emu.console || 'Retro', label: emu.console || 'Retro', count: 0, playtimeMs: 0, lastPlayed: 0 });
+      }
+    }
+    return Array.from(map.values())
+      .sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label));
+  }
+
+  function colorForTag(tag) {
+    let h = 0;
+    for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) % 360;
+    return h;
+  }
+
+  function monogramOf(label) {
+    const word = String(label || '?').split(/[\s/]+/).filter(Boolean);
+    const letters = word.map((w) => w[0].toUpperCase());
+    if (letters.length <= 1) {
+      const raw = (label || '?').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      return raw.slice(0, 3) || '?';
+    }
+    return letters.slice(0, 3).join('');
+  }
+
+  function renderConsoles() {
+    const groups = consoleGroups();
+    const withGames = groups.filter((g) => g.count > 0);
+    $('#consoles-count').textContent = withGames.length;
+
+    const grid = $('#consoles-grid');
+    if (groups.length === 0) {
+      grid.innerHTML = `<div class="consoles-empty">Añade carpetas de juegos o ROMs para que aparezcan tus consolas aquí.</div>`;
+      return;
+    }
+    grid.innerHTML = groups.map((g) => {
+      const hue = colorForTag(g.filter);
+      return `<button class="console-tile" data-filter="${esc(g.filter)}" role="button">
+        <span class="console-monogram" style="--tile-h:${hue}">${esc(monogramOf(g.label))}</span>
+        <span class="console-name">${esc(g.label)}</span>
+        <span class="console-count">${g.count} ${g.count === 1 ? 'juego' : 'juegos'}</span>
+        <span class="console-playtime">${g.playtimeMs > 0 ? formatPlaytime(g.playtimeMs) : 'sin jugar'}</span>
+      </button>`;
+    }).join('');
+
+    grid.querySelectorAll('.console-tile').forEach((tile) => {
+      tile.addEventListener('click', () => {
+        setFilter(tile.dataset.filter);
+        closeConsolesView();
+        Sound.select();
+        deselectGame();
+      });
+    });
+  }
+
+  function openConsolesView() {
+    if (state.allGames.length === 0 && (state.emulators || []).length === 0) return;
+    state.consolesOpen = true;
+    renderConsoles();
+    const el = $('#consoles-view');
+    el.classList.add('active');
+    el.setAttribute('aria-hidden', 'false');
+    $('#consoles-btn').classList.add('active');
+    $('#consoles-btn').setAttribute('aria-pressed', 'true');
+  }
+
+  function closeConsolesView() {
+    state.consolesOpen = false;
+    const el = $('#consoles-view');
+    el.classList.remove('active');
+    el.setAttribute('aria-hidden', 'true');
+    $('#consoles-btn').classList.remove('active');
+    $('#consoles-btn').setAttribute('aria-pressed', 'false');
+  }
+
+  $('#consoles-btn').addEventListener('click', () => {
+    if (state.consolesOpen) closeConsolesView();
+    else openConsolesView();
+    Sound.select();
+  });
+  $('#consoles-back').addEventListener('click', () => { closeConsolesView(); Sound.select(); });
+
   /* ═══════════════ GAME PAGE WIRING ═══════════════ */
   $('#gp-play').addEventListener('click', () => {
     if (state.selectedId) launchGame(state.selectedId);
@@ -1274,6 +1382,40 @@
     if (!state.selectedId) return;
     const game = state.allGames.find((g) => g.id === state.selectedId);
     if (game) openCoverModal(game);
+  });
+
+  const captureBtn = $('#gp-capture');
+  const originalCaptureLabel = captureBtn ? captureBtn.querySelector('span') : null;
+  captureBtn.addEventListener('click', async () => {
+    if (!state.selectedId) return;
+    const game = state.allGames.find((g) => g.id === state.selectedId);
+    if (!game) return;
+    if (game.launchUri && !game.exePath && !game.romPath) {
+      toast('No se puede capturar un juego de launcher externo', 'error');
+      return;
+    }
+    Sound.launch();
+    const label = originalCaptureLabel;
+    if (label) label.textContent = 'Capturando en 8 s...';
+    captureBtn.disabled = true;
+    try {
+      const result = await api.captureGameplay(game.id);
+      if (result && result.ok) {
+        game.hasLocalCover = true;
+        game.localCoverPath = result.localCoverPath;
+        applyVisible();
+        if (state.selectedId === game.id) renderDetailPanel(game);
+        toast('Captura guardada. ¡Se usará como portada!', 'success');
+      } else {
+        toast(result && result.error ? result.error : 'No se pudo capturar la imagen', 'error');
+      }
+    } catch (err) {
+      console.error('Capture gameplay failed:', err);
+      toast('Error al capturar el gameplay', 'error');
+    } finally {
+      captureBtn.disabled = false;
+      if (label) label.textContent = 'Capturar gameplay';
+    }
   });
 
   $('#shot-close').addEventListener('click', closeShotView);
@@ -1354,6 +1496,7 @@
     }
 
     if (e.key === 'Escape') {
+      if (state.consolesOpen) return closeConsolesView();
       if (menuOpen) return hideContextMenu();
       if (modalOpen) return closeCoverModal();
       if (drawerOpen) return closeDrawer();
@@ -1924,7 +2067,8 @@
   async function loadEmulators() {
     try {
       const emus = await api.getEmulators();
-      renderEmulatorsList(emus || []);
+      state.emulators = emus || [];
+      renderEmulatorsList(state.emulators);
     } catch (err) {
       console.error('Failed to load emulators:', err);
     }
