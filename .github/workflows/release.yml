@@ -25,7 +25,43 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish release (electron-builder creates drafts)
-        run: gh release edit "${GITHUB_REF_NAME}" --draft=false
+      - name: Publish release (electron-builder creates duplicate drafts)
+        shell: pwsh
+        run: |
+          $tag = "${env:GITHUB_REF_NAME}"
+          $repo = "Riuyi231/gamevault"
+
+          function Get-TagDrafts {
+            gh release list --repo $repo --json tagName,databaseId,isDraft,assets |
+              ConvertFrom-Json |
+              Where-Object { $_.tagName -eq $tag }
+          }
+
+          # electron-builder may create BOTH a draft with the full installer and an
+          # orphan draft (blockmap only). Keep the draft that holds the .exe.
+          $mine = @(Get-TagDrafts)
+          $main = $mine | Where-Object {
+            @($_.assets | ForEach-Object { $_.name }) -match '\.exe$'
+          } | Select-Object -First 1
+          if (-not $main) { $main = $mine | Select-Object -First 1 }
+
+          if (@($mine).Count -gt 1) {
+            foreach ($r in $mine) {
+              if ($r.databaseId -ne $main.databaseId) {
+                gh api -X DELETE "repos/$repo/releases/$($r.databaseId)" | Out-Null
+              }
+            }
+          }
+
+          gh release edit $tag --repo $repo --draft=false
+          gh release edit $tag --repo $repo --latest
+
+          # Sweep orphans created right after the publish step
+          Start-Sleep -Seconds 3
+          foreach ($r in @(Get-TagDrafts)) {
+            if ($r.isDraft) {
+              gh api -X DELETE "repos/$repo/releases/$($r.databaseId)" | Out-Null
+            }
+          }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
