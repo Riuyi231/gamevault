@@ -1271,7 +1271,7 @@
 
   function openLibraryNow() { closeHome(); }
 
-  /* ═══════════════ ARCADE MODE ═══════════════ */
+  /* ═══════════════ CONSOLE MODE (PS5-style) ═══════════════ */
   function arcadeGame() {
     if (state.visibleGames.length === 0) return null;
     if (state.arcadeIndex < 0 || state.arcadeIndex >= state.visibleGames.length) {
@@ -1281,49 +1281,151 @@
     return state.visibleGames[state.arcadeIndex];
   }
 
+  const ARCADE_CURRENCY = { USD: '$', EUR: '€', GBP: '£', MXN: '$', ARS: '$', BRL: 'R$', CLP: '$', COP: '$' };
+
+  function arcadeMetaLine(game, info) {
+    const parts = [];
+    const metascore = info && (info.metascore || info.rating);
+    if (metascore != null) parts.push(`<span class="arcade-meta-item arcade-meta-score">${esc(metascore)}</span>`);
+    if (info && info.releaseDate) parts.push(`<span class="arcade-meta-item">${esc(info.releaseDate)}</span>`);
+    let price = null;
+    if (info && info.isFree) price = T('meta.free');
+    else if (info && info.price && typeof info.price.final === 'number') {
+      const cur = ARCADE_CURRENCY[info.price.currency];
+      price = `${cur || (info.price.currency + ' ')}${info.price.final.toFixed(2)}`;
+    }
+    if (price != null) parts.push(`<span class="arcade-meta-item">${esc(price)}</span>`);
+    if (info && info.developers && info.developers.length) parts.push(`<span class="arcade-meta-item">${esc(info.developers.slice(0, 2).join(', '))}</span>`);
+    if (info && info.platforms && info.platforms.length) parts.push(`<span class="arcade-meta-item">${esc(info.platforms.slice(0, 4).join(', '))}</span>`);
+    if (game.playtimeMs > 0) parts.push(`<span class="arcade-meta-item">${esc(formatPlaytime(game.playtimeMs))}</span>`);
+    return parts.join('');
+  }
+
+  function renderArcadeShell() {
+    const wrap = $('#arcade-shelf-row');
+    if (state.arcadeShelfFor === state.visibleGames && wrap.children.length === state.visibleGames.length) return;
+    wrap.innerHTML = '';
+    state.visibleGames.forEach((g, i) => {
+      const tile = document.createElement('div');
+      tile.className = 'arcade-tile';
+      tile.dataset.index = String(i);
+      const cover = document.createElement('div');
+      cover.className = 'arcade-tile-cover';
+      const img = document.createElement('img');
+      img.alt = g.name;
+      img.loading = 'lazy';
+      img.draggable = false;
+      img.src = getCoverSrc(g);
+      img.onerror = () => { img.src = 'default-cover.svg'; };
+      const hint = document.createElement('div');
+      hint.className = 'arcade-tile-play';
+      hint.innerHTML = '<svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>';
+      cover.appendChild(img);
+      cover.appendChild(hint);
+      const name = document.createElement('div');
+      name.className = 'arcade-tile-name';
+      name.textContent = g.name;
+      tile.appendChild(cover);
+      tile.appendChild(name);
+      tile.addEventListener('click', () => { arcadeNavTo(i); Sound.select(); });
+      tile.addEventListener('mouseenter', () => { if (state.arcadeIndex !== i) arcadeNavTo(i); });
+      wrap.appendChild(tile);
+    });
+    state.arcadeShelfFor = state.visibleGames;
+  }
+
   function renderArcade(game) {
     if (!game) return;
+    renderArcadeShell();
     const bg = $('#arcade-bg');
-    const cover = $('#arcade-cover');
-    const shimmer = $('.arcade-shimmer');
-    const coverSrc = getCoverSrc(game);
     const bannerSrc = getBannerSrc(game);
+    bg.style.backgroundImage = bannerSrc && bannerSrc !== 'default-cover.svg' ? `url("${bannerSrc}")` : '';
 
-    cover.classList.remove('loaded');
-    shimmer.classList.remove('done');
-    const loadCover = (url) => {
-      cover.onload = () => {
-        shimmer.classList.add('done');
-        cover.classList.add('loaded');
-        bg.style.backgroundImage = `url("${bannerSrc}")`;
-      };
-      cover.onerror = () => {
-        if (url !== 'default-cover.svg') loadCover('default-cover.svg');
-        else {
-          shimmer.classList.add('done');
-          cover.classList.add('loaded');
-          bg.style.backgroundImage = '';
-        }
-      };
-      if (cover.src !== url) cover.src = url;
-      else { shimmer.classList.add('done'); cover.classList.add('loaded'); bg.style.backgroundImage = `url("${bannerSrc}")`; }
-    };
-    loadCover(coverSrc);
-    if (bannerSrc === 'default-cover.svg') bg.style.backgroundImage = '';
+    const title = $('#arcade-title');
+    title.textContent = game.name;
 
-    $('#arcade-title').textContent = game.name;
     $('#arcade-platform').textContent = platformLabelOf(game);
     $('#arcade-platform').className = 'detail-platform ' + platformKeyOf(game);
     $('#arcade-counter').textContent = `${state.arcadeIndex + 1} / ${state.visibleGames.length}`;
+
+    $('#arcade-meta').innerHTML = arcadeMetaLine(game, state.detailCache.get(game.id));
+    const desc = $('#arcade-desc');
+    desc.classList.add('loading');
+    desc.textContent = T('detail.loading');
+
+    const tiles = Array.from($('#arcade-shelf-row').children);
+    tiles.forEach((t) => t.classList.toggle('cur', Number(t.dataset.index) === state.arcadeIndex));
+    const cur = tiles[state.arcadeIndex];
+    const row = $('#arcade-shelf-row');
+    if (cur) {
+      const tileLeft = cur.offsetLeft;
+      const tileRight = tileLeft + cur.offsetWidth;
+      const rowLeft = row.scrollLeft;
+      const rowRight = rowLeft + row.clientWidth;
+      if (tileLeft < rowLeft || tileRight > rowRight) {
+        cur.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    }
+    arcadeHeroInfo(game);
+    Sound.move();
+  }
+
+  function arcadeHeroInfo(game) {
+    const id = game.id;
+    const cached = state.detailCache.get(id);
+    if (cached) {
+      applyArcadeInfo(id, cached);
+      return;
+    }
+    Promise.resolve()
+      .then(() => api.getGameInfo(game))
+      .then((res) => {
+        const info = res && (res.shortDescription !== undefined) ? res : null;
+        if (!info) return;
+        state.detailCache.set(id, info);
+        if (state.arcade && arcadeGame() && arcadeGame().id === id) applyArcadeInfo(id, info);
+      })
+      .catch(() => { /* silencioso: el héroe muestra el fallback */ });
+  }
+
+  function applyArcadeInfo(id, info) {
+    if (!state.arcade) return;
+    const game = state.visibleGames[state.arcadeIndex];
+    if (!game || game.id !== id) return;
+
+    const chips = $('#arcade-chips');
+    let genres = '';
+    if (info && info.genres && info.genres.length) {
+      genres = info.genres.slice(0, 6).map((g) => `<span class="arcade-chip">${esc(g)}</span>`).join('');
+    }
+    const platform = $('#arcade-platform').outerHTML;
+    chips.innerHTML = platform + genres;
+
+    $('#arcade-meta').innerHTML = arcadeMetaLine(game, info);
+
+    const desc = $('#arcade-desc');
+    if (info && info.shortDescription) {
+      desc.textContent = info.shortDescription;
+    } else if (info && info.detailedDescription) {
+      desc.textContent = info.detailedDescription;
+    } else {
+      const lines = [];
+      lines.push(T('detail.desc.platform', { label: esc(platformLabelOf(game)) }));
+      if (game.romPath) lines.push(T('detail.desc.rom', { path: esc(game.romPath) }));
+      else if (game.installDir) lines.push(T('detail.desc.location', { path: esc(game.installDir) }));
+      if (game.sizeOnDisk) lines.push(T('detail.desc.size', { size: (game.sizeOnDisk / 1073741824).toFixed(1) }));
+      desc.textContent = lines.join('  ·  ');
+    }
+    desc.classList.remove('loading');
   }
 
   function openArcade() {
     if (state.visibleGames.length === 0) return;
     state.arcade = true;
-    renderArcade(arcadeGame());
     const el = $('#arcade');
     el.classList.add('active');
     el.setAttribute('aria-hidden', 'false');
+    renderArcade(arcadeGame());
   }
 
   function closeArcade() {
@@ -1340,7 +1442,15 @@
     state.arcadeIndex = (state.arcadeIndex + dir + n) % n;
     selectGame(state.visibleGames[state.arcadeIndex].id);
     renderArcade(arcadeGame());
-    Sound.move();
+  }
+
+  function arcadeNavTo(i) {
+    if (!state.arcade) return;
+    const n = state.visibleGames.length;
+    if (n === 0 || i < 0 || i >= n || i === state.arcadeIndex) return;
+    state.arcadeIndex = i;
+    selectGame(state.visibleGames[i].id);
+    renderArcade(arcadeGame());
   }
 
   $('#arcade-play').addEventListener('click', () => {

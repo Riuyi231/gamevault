@@ -712,29 +712,35 @@
     <div class="home-hint" data-i18n="home.hint">↑ ↓ elegir · Enter confirmar · Esc saltar</div>
   </div>
 
-  <!-- ═══════════ ARCADE MODE ═══════════ -->
+  <!-- ═══════════ CONSOLE MODE (PS5-style) ═══════════ -->
   <div id="arcade" aria-hidden="true">
     <div class="arcade-bg" id="arcade-bg"></div>
     <div class="arcade-shade"></div>
     <div class="arcade-top">
       <span class="arcade-brand">GAMEVAULT</span>
       <span class="arcade-counter" id="arcade-counter"></span>
-      <button class="arcade-exit" id="arcade-exit" title="Salir del modo arcade" data-i18n-title="arcade.exit">✕</button>
+      <button class="arcade-exit" id="arcade-exit" title="Salir del modo consola" data-i18n-title="arcade.exit">✕</button>
     </div>
-    <div class="arcade-content">
-      <div class="arcade-cover" id="arcade-cover-wrap">
-        <div class="arcade-shimmer"></div>
-        <img id="arcade-cover" alt="" draggable="false">
+    <div class="arcade-body">
+      <div class="arcade-hero">
+        <h2 class="arcade-title" id="arcade-title"></h2>
+        <div class="arcade-chips" id="arcade-chips">
+          <span class="detail-platform" id="arcade-platform"></span>
+        </div>
+        <div class="arcade-meta" id="arcade-meta"></div>
+        <p class="arcade-desc" id="arcade-desc"></p>
+        <div class="arcade-actions">
+          <button class="arcade-play" id="arcade-play">
+            <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
+            <span data-i18n="btn.play">Jugar</span>
+          </button>
+        </div>
       </div>
-      <h2 class="arcade-title" id="arcade-title"></h2>
-      <div class="arcade-badges">
-        <span class="detail-platform" id="arcade-platform"></span>
+      <div class="arcade-shelf">
+        <div class="arcade-shelf-label" id="arcade-shelf-label" data-i18n="arcade.shelfLabel">Tu biblioteca</div>
+        <div class="arcade-shelf-row" id="arcade-shelf-row"></div>
+        <div class="arcade-hint" data-i18n="arcade.hint">← →  cambiar  ·  Enter  jugar  ·  Esc  salir</div>
       </div>
-      <button class="arcade-play" id="arcade-play">
-        <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
-        <span data-i18n="btn.play">Jugar</span>
-      </button>
-      <div class="arcade-hint" data-i18n="arcade.hint">← →  cambiar  ·  Enter  jugar  ·  Esc  salir</div>
     </div>
   </div>
 
