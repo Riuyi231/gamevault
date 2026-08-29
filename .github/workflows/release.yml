@@ -21,6 +21,6 @@ jobs:
         run: npm ci
 
       - name: Build & Publish to GitHub Release
-        run: npx electron-builder --win nsis --x64 --ia32 --publish always
+        run: npx electron-builder --win nsis --x64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
