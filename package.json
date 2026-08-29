@@ -1,0 +1,52 @@
+{
+  "name": "gamevault",
+  "productName": "GameVault",
+  "version": "1.2.0",
+  "description": "GameVault - Modern multi-platform game launcher",
+  "author": "Riuyi231",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "release": "electron-builder --win --publish always",
+    "dist": "electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.0"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.gamevault.launcher",
+    "productName": "GameVault",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Riuyi231",
+        "repo": "gamevault"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GameVault",
+      "artifactName": "GameVault-Setup-${version}.${ext}"
+    },
+    "files": [
+      "src/**/*",
+      "assets/icon.ico",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

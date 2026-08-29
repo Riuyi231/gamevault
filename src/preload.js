@@ -1,0 +1,39 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+const api = {
+  getGames: () => ipcRenderer.invoke('get-games'),
+  launchGame: (id) => ipcRenderer.invoke('launch-game', id),
+  rescan: () => ipcRenderer.invoke('rescan'),
+  addGame: (data) => ipcRenderer.invoke('add-game', data),
+  removeGame: (id) => ipcRenderer.invoke('remove-game', id),
+  deleteGameFromDisk: (id) => ipcRenderer.invoke('delete-game-from-disk', id),
+  searchArtwork: (name) => ipcRenderer.invoke('search-artwork', name),
+  getArtworkConfig: () => ipcRenderer.invoke('get-artwork-config'),
+  checkUpdates: () => ipcRenderer.invoke('check-updates'),
+  openUpdateUrl: (url) => ipcRenderer.invoke('open-update-url', url),
+  setCover: (id, dataUrlOrUrl) => ipcRenderer.invoke('set-cover', id, dataUrlOrUrl),
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  setSettings: (s) => ipcRenderer.invoke('set-settings', s),
+  getCustomFolders: () => ipcRenderer.invoke('get-custom-folders'),
+  addCustomFolder: (p) => ipcRenderer.invoke('add-custom-folder', p),
+  removeCustomFolder: (p) => ipcRenderer.invoke('remove-custom-folder', p),
+  selectFolder: () => ipcRenderer.invoke('select-folder'),
+  selectExecutable: () => ipcRenderer.invoke('select-executable'),
+  getEmulators: () => ipcRenderer.invoke('get-emulators'),
+  addEmulator: (emulator) => ipcRenderer.invoke('add-emulator', emulator),
+  removeEmulator: (id) => ipcRenderer.invoke('remove-emulator', id),
+  openFolder: (p) => ipcRenderer.invoke('open-folder', p),
+  getGameInfo: (game) => ipcRenderer.invoke('get-game-info', game),
+  getPlatforms: () => ipcRenderer.invoke('get-platforms'),
+  toggleFullscreen: () => ipcRenderer.send('window-fullscreen'),
+  minimize: () => ipcRenderer.send('window-minimize'),
+  maximize: () => ipcRenderer.send('window-maximize'),
+  close: () => ipcRenderer.send('window-close'),
+
+  onGameAdded: (cb) => ipcRenderer.on('game-added', (_, g) => cb(g)),
+  onGameRemoved: (cb) => ipcRenderer.on('game-removed', (_, id) => cb(id)),
+  onScanProgress: (cb) => ipcRenderer.on('scan-progress', (_, d) => cb(d)),
+  onScanComplete: (cb) => ipcRenderer.on('scan-complete', (_, d) => cb(d))
+};
+
+contextBridge.exposeInMainWorld('gamevault', api);

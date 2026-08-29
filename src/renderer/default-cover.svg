@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#00d2ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <rect x="3" y="3" width="594" height="894" rx="14" fill="none" stroke="url(#accent)" stroke-width="2" opacity="0.18"/>
+  <circle cx="300" cy="350" r="150" fill="none" stroke="url(#accent)" stroke-width="1" opacity="0.07"/>
+  <circle cx="300" cy="350" r="205" fill="none" stroke="url(#accent)" stroke-width="1" opacity="0.05"/>
+  <g transform="translate(300,340)" opacity="0.55">
+    <circle r="92" fill="none" stroke="url(#accent)" stroke-width="2.5" opacity="0.28"/>
+    <circle r="70" fill="none" stroke="url(#accent)" stroke-width="1.5" opacity="0.16"/>
+    <rect x="-72" y="-28" width="144" height="56" rx="28" fill="none" stroke="url(#accent)" stroke-width="3"/>
+    <circle cx="-34" cy="0" r="10" fill="#7c5cff"/>
+    <circle cx="34" cy="0" r="10" fill="#00d2ff"/>
+    <rect x="-14" y="-58" width="28" height="12" rx="6" fill="url(#accent)"/>
+    <rect x="-14" y="46" width="28" height="12" rx="6" fill="url(#accent)"/>
+    <rect x="-60" y="-14" width="12" height="28" rx="6" fill="url(#accent)"/>
+    <rect x="48" y="-14" width="12" height="28" rx="6" fill="url(#accent)"/>
+  </g>
+  <text x="300" y="565" text-anchor="middle" fill="#7c5cff" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="800" letter-spacing="6">GAMEVAULT</text>
+  <text x="300" y="600" text-anchor="middle" fill="#484f58" font-family="Segoe UI, Arial, sans-serif" font-size="15" letter-spacing="2">SIN PORTADA</text>
+</svg>
