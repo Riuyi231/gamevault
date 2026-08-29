@@ -810,6 +810,10 @@
       game.bannerUrl = info.banner;
       $('#gp-bg').style.backgroundImage = `url("${info.banner}")`;
     }
+    if (game && info && info.coverUrl && !game.coverUrl && !game.hasLocalCover) {
+      game.coverUrl = info.coverUrl;
+      if (state.selectedId === id) applyVisible();
+    }
     if (info && (info.detailedDescription || info.about || info.shortDescription)) {
       const descText = info.detailedDescription || info.about || info.shortDescription || '';
       desc.className = 'gp-desc';
@@ -959,7 +963,8 @@
       if (result && result.success) {
         toast(T('launch.launching', { name: game.name }));
       } else {
-        toast(T('launch.failed', { name: game.name }), 'error');
+        const detail = result && result.error;
+        toast(detail ? `${T('launch.failed', { name: game.name })} ${detail}` : T('launch.failed', { name: game.name }), 'error');
         console.warn('Launch failed:', result && result.error);
       }
     } catch (err) {
@@ -1304,6 +1309,46 @@
     return letters.slice(0, 3).join('');
   }
 
+  // Icono estilizado por plataforma/consola en vez del monograma genérico.
+  function platformIconOf(keyOrLabel) {
+    const v = String(keyOrLabel || '').trim();
+    const low = v.toLowerCase();
+
+    const stroke = 'stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"';
+    const solid = 'fill="currentColor"';
+
+    const brandIcons = {
+      steam: `<svg viewBox="0 0 24 24" ${stroke}><circle cx="12" cy="12" r="9"/><path d="M12 3v9"/><path d="M12 12a4 4 0 0 1 4-4"/><circle cx="15.5" cy="15.5" r="1.6" fill="currentColor" stroke="none"/><path d="M8 8l.5 3 2.5-1.4" fill="currentColor" stroke="none"/></svg>`,
+      epic: `<svg viewBox="0 0 24 24" ${stroke}><path d="M12 2l6 4-6 4-6-4z" fill="currentColor" stroke="none"/><path d="M12 13l6-1-1.8 8-4.2-4-4.2 4L6 12z" fill="currentColor" stroke="none"/></svg>`,
+      gog: `<svg viewBox="0 0 24 24" ${stroke}><circle cx="12" cy="12" r="9"/><path d="M8.2 12h7.6"/><path d="M5.5 9.2h13M5.5 14.8h13"/></svg>`,
+      xbox: `<svg viewBox="0 0 24 24" ${stroke}><circle cx="12" cy="12" r="9"/><path d="M4 7.5c3 4.2 3.6 4.2 8 9 4.4-4.8 5-4.8 8-9"/><path d="M4 16.5c3-4.2 3.6-4.2 8-9 4.4 4.8 5 4.8 8 9"/></svg>`,
+      retro: `<svg viewBox="0 0 24 24" ${stroke}><rect x="2" y="5" width="20" height="14" rx="3.5"/><rect x="5" y="8" width="10" height="8" rx="1"/><circle cx="18" cy="10" r="0.5" fill="currentColor" stroke="none"/><path d="M17.5 13.5v1.5M16.75 12v-1M19.25 12v-1" stroke-width="1.4"/></svg>`,
+      other: `<svg viewBox="0 0 24 24" ${stroke}><path d="M12 2L2 7l10 5 10-5-10-5z" fill="currentColor" stroke="none"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`
+    };
+    if (brandIcons[low] && /^(steam|epic|gog|xbox|retro|other)$/.test(low)) return brandIcons[low];
+
+    const consoleIcons = [
+      { re: /nintendo 64|---|---|n64|\bn64\b/, svg: `<svg viewBox="0 0 24 24" ${stroke}><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="11" r="2.4" fill="currentColor" stroke="none"/><path d="M7.5 14.2v1.2M10.5 14.2v1.2"/><circle cx="14.5" cy="13.5" r="1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="11" r="1" fill="currentColor" stroke="none"/></svg>` },
+      { re: /nes|famicom/, svg: `<svg viewBox="0 0 24 24" ${stroke}><rect x="3" y="6" width="18" height="12" rx="2"/><rect x="6.5" y="9" width="7" height="8" rx="0.8"/><rect x="14.5" y="10" width="3" height="1.6" rx="0.8"/><path d="M6.5 11.5h2M8.5 12v-1.4M8.5 15.2v-1.4"/></svg>` },
+      { re: /snes|super nintendo/, svg: `<svg viewBox="0 0 24 24" ${stroke}><rect x="3" y="6" width="18" height="12" rx="3"/><rect x="8" y="9" width="8" height="7" rx="1"/><circle cx="11" cy="11.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="13" cy="11.5" r="0.7" fill="currentColor" stroke="none"/><rect x="10.6" y="13.5" width="2.8" height="1.2" rx="0.6"/><path d="M16.4 9.4h-2.4"/></svg>` },
+      { re: /game ?boy|gba|\bgbc\b/, svg: `<svg viewBox="0 0 24 24" ${stroke}><rect x="9" y="2" width="6" height="20" rx="2"/><path d="M9 6h6"/><rect x="7" y="6" width="10" height="12" rx="1.5"/><circle cx="11" cy="10" r="1" fill="currentColor" stroke="none"/><path d="M10.5 12.8v2M9.5 13.8h2"/><circle cx="14" cy="12" r="1"/></svg>` },
+      { re: /gamecube|dolphin|\bgc\b|nintendo gc/, svg: `<svg viewBox="0 0 24 24" ${stroke}><rect x="7.5" y="2.5" width="9" height="9" rx="1.5"/><rect x="3" y="13" width="7.5" height="8" rx="1.2"/><rect x="13.5" y="13" width="7.5" height="8" rx="1.2"/><rect x="9" y="13" width="6" height="3" rx="0.6"/><circle cx="6.5" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="17.5" cy="16" r="1" fill="currentColor" stroke="none"/></svg>` },
+      { re: /wii/, svg: `<svg viewBox="0 0 24 24" ${stroke}><path d="M3.5 7h4l1.5 9 2-6.5L12 9l1 0.5 2 6.5 1.5-9h4"/><circle cx="6" cy="7" r="0.8" fill="currentColor" stroke="none"/></svg>` },
+      { re: /nds|nintendo ds|3ds/, svg: `<svg viewBox="0 0 24 24" ${stroke}><rect x="3" y="4" width="18" height="9" rx="1.5"/><rect x="6" y="15" width="12" height="6" rx="1.2"/><path d="M5 6.5h4M5 9h2.5"/><line x1="18" y1="18" x2="18" y2="18"/></svg>` },
+      { re: /playstation|\bps|\bpsp/, svg: `<svg viewBox="0 0 24 24" ${stroke}><path d="M4 15.5c2.2 1.4 4.5 1.6 6.8.6 1.8-.8 3.6-.6 5.4.5"/><path d="M4.5 18.6c2.3 1.2 4.7 1.3 7 .3 1.8-.8 3.7-.6 5.5.4"/><path d="M3.8 21.4c2.4 1.1 4.8 1.1 7.2 0 1.8-.8 3.7-.5 5.6.4"/></svg>` },
+      { re: /sega|mega ?drive|genesis/, svg: `<svg viewBox="0 0 24 24" ${stroke}><rect x="3" y="4" width="18" height="10" rx="2"/><path d="M6 18h2M12 18h2M18 18h2" stroke-width="2"/><circle cx="16" cy="9" r="0.7" fill="currentColor" stroke="none"/><circle cx="8" cy="9" r="0.7" fill="currentColor" stroke="none"/><path d="M6 8.6h4M14 8.6h4" stroke-width="1.2"/></svg>` },
+      { re: /saturn/, svg: `<svg viewBox="0 0 24 24" ${stroke}><circle cx="12" cy="12" r="4"/><ellipse cx="12" cy="12" rx="9" ry="4"/><path d="M4 9c2.5 4 6 6 8 6s5.5-2 8-6"/></svg>` },
+      { re: /dreamcast|dc/, svg: `<svg viewBox="0 0 24 24" ${stroke}><path d="M4 12a8 8 0 0 1 16 0"/><path d="M20 12a8 8 0 0 1-16 0"/><path d="M12 4v16"/><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="0.4" fill="currentColor" stroke="none"/></svg>` },
+      { re: /atari/, svg: `<svg viewBox="0 0 24 24" ${stroke}><path d="M5 3h14l-3 18-5-3-5 3z" fill="currentColor" stroke="none" opacity="0.35"/><path d="M5 3h14l-6 9z"/></svg>` },
+      { re: /arcade/, svg: `<svg viewBox="0 0 24 24" ${stroke}><rect x="4" y="12" width="16" height="8" rx="2"/><path d="M7 5l2.5-2 2 4M13 7l4-2M11 3h4"/><circle cx="8.5" cy="16" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="16" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="16" r="1.2" fill="currentColor" stroke="none"/><path d="M5 12V8h14v4"/></svg>` }
+    ];
+    for (const c of consoleIcons) {
+      if (c.re.test(low)) return c.svg;
+    }
+
+    return null;
+  }
+
   function renderConsoles() {
     const groups = consoleGroups();
     const withGames = groups.filter((g) => g.count > 0);
@@ -1316,8 +1361,12 @@
     }
     grid.innerHTML = groups.map((g) => {
       const hue = colorForTag(g.filter);
+      const icon = platformIconOf(g.filter) || platformIconOf(g.label);
+      const iconHtml = icon
+        ? `<span class="console-icon" style="--tile-h:${hue}">${icon}</span>`
+        : `<span class="console-monogram" style="--tile-h:${hue}">${esc(monogramOf(g.label))}</span>`;
       return `<button class="console-tile" data-filter="${esc(g.filter)}" role="button">
-        <span class="console-monogram" style="--tile-h:${hue}">${esc(monogramOf(g.label))}</span>
+        ${iconHtml}
         <span class="console-name">${esc(g.label)}</span>
         <span class="console-count">${esc(T('consoles.games', { n: g.count }))}</span>
         <span class="console-playtime">${g.playtimeMs > 0 ? formatPlaytime(g.playtimeMs) : esc(T('consoles.unplayed'))}</span>
@@ -1336,6 +1385,7 @@
 
   function openConsolesView() {
     if (state.allGames.length === 0 && (state.emulators || []).length === 0) return;
+    if ($('#emulators-view').classList.contains('active')) closeEmulatorsView();
     state.consolesOpen = true;
     renderConsoles();
     const el = $('#consoles-view');
@@ -1353,6 +1403,96 @@
     $('#consoles-btn').classList.remove('active');
     $('#consoles-btn').setAttribute('aria-pressed', 'false');
   }
+
+  /* ═══════════════ EMULATORS VIEW ═══════════════ */
+  function emulatorCard(emu) {
+    const icon = platformIconOf(emu.console || 'Retro');
+    const iconHtml = icon
+      ? `<span class="console-icon emu-card-icon">${icon}</span>`
+      : `<span class="console-monogram">${esc(monogramOf(emu.name))}</span>`;
+    const bundled = emu.bundled ? `<span class="emu-bundled">${esc(T('emu.bundled'))}</span>` : '';
+    const status = emulatorStatusText(emu);
+    const exeOk = emu.exePath ? `<span class="emu-card-path">${esc(emu.exePath)}</span>` : '';
+    const roms = emu.romsPath ? `<span class="emu-card-path">${esc(emu.romsPath)}</span>` : '';
+    return `<div class="emu-card" data-id="${esc(emu.id)}">
+      ${iconHtml}
+      <div class="emu-card-body">
+        <div class="emu-card-head">
+          <span class="emu-card-name">${bundled}${esc(emu.name)}</span>
+          <span class="emu-card-console">${esc(emu.console || T('emu.emulator'))}</span>
+        </div>
+        <div class="emu-card-paths">${exeOk}${roms}</div>
+        <div class="emu-item-status"><span class="emu-status-text ${status.empty ? 'emu-status-empty' : ''}">${status.text}</span></div>
+      </div>
+      <div class="emu-card-actions">
+        ${emu.romsPath ? `<button class="emu-open" data-path="${esc(emu.romsPath)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> ${esc(T('emu.openRoms'))}</button>` : ''}
+        <button class="emu-remove" data-id="${esc(emu.id)}" title="${esc(T('emu.removeTitle'))}">✕</button>
+      </div>
+    </div>`;
+  }
+
+  function renderEmulatorsView() {
+    const grid = $('#emulators-grid');
+    if (!grid) return;
+    $('#emulators-count').textContent = (state.emulators || []).length;
+    const emus = state.emulators || [];
+    if (emus.length === 0) {
+      grid.innerHTML = `<div class="consoles-empty">
+        <p>${esc(T('emu.none'))}</p>
+        <button class="btn-primary" id="emulators-empty-add" data-i18n="emu.addButton">${esc(T('emu.addButton'))}</button>
+      </div>`;
+      const btn = $('#emulators-empty-add');
+      if (btn) btn.addEventListener('click', () => { closeEmulatorsView(); openDrawer(); });
+      return;
+    }
+    grid.innerHTML = emus.map(emulatorCard).join('');
+
+    grid.querySelectorAll('.emu-open').forEach((btn) => {
+      btn.addEventListener('click', async () => { await api.openFolder(btn.dataset.path); });
+    });
+    grid.querySelectorAll('.emu-remove').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await api.removeEmulator(btn.dataset.id);
+          await loadEmulators();
+          toast(T('emu.removed'));
+        } catch (err) {
+          console.error('Remove emulator failed:', err);
+          toast(T('emu.removeFailed'), 'error');
+        }
+      });
+    });
+  }
+
+  function openEmulatorsView() {
+    if ((state.emulators || []).length === 0 && state.allGames.length === 0) {
+      openDrawer();
+      return;
+    }
+    if (state.consolesOpen) closeConsolesView();
+    renderEmulatorsView();
+    const el = $('#emulators-view');
+    el.classList.add('active');
+    el.setAttribute('aria-hidden', 'false');
+    $('#emulators-btn').classList.add('active');
+    $('#emulators-btn').setAttribute('aria-pressed', 'true');
+  }
+
+  function closeEmulatorsView() {
+    const el = $('#emulators-view');
+    el.classList.remove('active');
+    el.setAttribute('aria-hidden', 'true');
+    $('#emulators-btn').classList.remove('active');
+    $('#emulators-btn').setAttribute('aria-pressed', 'false');
+  }
+
+  $('#emulators-btn').addEventListener('click', () => {
+    if ($('#emulators-view').classList.contains('active')) closeEmulatorsView();
+    else openEmulatorsView();
+    Sound.select();
+  });
+  $('#emulators-back').addEventListener('click', () => { closeEmulatorsView(); Sound.select(); });
+  $('#emulators-add').addEventListener('click', () => { closeEmulatorsView(); openDrawer(); });
 
   $('#consoles-btn').addEventListener('click', () => {
     if (state.consolesOpen) closeConsolesView();
@@ -1512,6 +1652,7 @@
 
     if (e.key === 'Escape') {
       if (state.consolesOpen) return closeConsolesView();
+      if ($('#emulators-view').classList.contains('active')) return closeEmulatorsView();
       if (menuOpen) return hideContextMenu();
       if (modalOpen) return closeCoverModal();
       if (drawerOpen) return closeDrawer();
@@ -2020,6 +2161,20 @@
     return String(p || '').split(/[\\/]/).pop();
   }
 
+  function retroGamesFor(emu) {
+    if (!emu || !state.allGames) return 0;
+    return state.allGames.filter(
+      (g) => g.source === 'retro' && (g.platform || '') === (emu.console || '')
+    ).length;
+  }
+
+  function emulatorStatusText(emu) {
+    const retroCount = retroGamesFor(emu);
+    if (retroCount === 0) return { text: T('emu.noRoms'), empty: true };
+    if (retroCount === 1) return { text: T('emu.oneGame'), empty: false };
+    return { text: T('emu.nGames', { n: retroCount }), empty: false };
+  }
+
   function renderEmulatorsList(emulators) {
     const wrap = $('#settings-emulators');
     if (!wrap) return;
@@ -2036,17 +2191,8 @@
       const item = document.createElement('div');
       item.className = 'emu-item';
       const bundledBadge = emu.bundled ? `<span class="emu-bundled">${esc(T('emu.bundled'))}</span> ` : '';
-      const retroCount = state.allGames
-        ? state.allGames.filter(
-            (g) => g.source === 'retro' && (g.platform || '') === (emu.console || '')
-          ).length
-        : 0;
-      const statusText =
-        retroCount === 0
-          ? T('emu.noRoms')
-          : retroCount === 1
-            ? T('emu.oneGame')
-            : T('emu.nGames', { n: retroCount });
+      const retroCount = retroGamesFor(emu);
+      const status = emulatorStatusText(emu);
       const openBtn = emu.romsPath
         ? `<button class="emu-open" data-path="${esc(emu.romsPath)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> ${esc(T('emu.openRoms'))}</button>`
         : '';
@@ -2055,7 +2201,7 @@
           <div class="emu-item-name">${bundledBadge}${esc(emu.name)}</div>
           <div class="emu-item-console">${esc(emu.console || 'Retro')}</div>
           <div class="emu-item-paths">${esc(emu.exePath)}${emu.romsPath ? '<br>' + esc(emu.romsPath) : ''}</div>
-          <div class="emu-item-status"><span class="emu-status-text ${retroCount === 0 ? 'emu-status-empty' : ''}">${statusText}</span> ${openBtn}</div>
+          <div class="emu-item-status"><span class="emu-status-text ${status.empty ? 'emu-status-empty' : ''}">${status.text}</span> ${openBtn}</div>
         </div>
         <button class="emu-remove" data-id="${esc(emu.id)}" title="${esc(T('emu.removeTitle'))}">✕</button>
       `;
@@ -2085,6 +2231,7 @@
       const emus = await api.getEmulators();
       state.emulators = emus || [];
       renderEmulatorsList(state.emulators);
+      renderEmulatorsView();
     } catch (err) {
       console.error('Failed to load emulators:', err);
     }

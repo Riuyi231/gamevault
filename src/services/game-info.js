@@ -161,6 +161,157 @@ class GameInfoService {
     }
   }
 
+  /* ── Wikipedia (keyless, cualquier plataforma, descripción localizada) ── */
+  _looksSpanish(text) {
+    const low = String(text || '').toLowerCase();
+    const markers = [' es ', ' el ', ' la ', ' los ', ' las ', ' un ', ' una ', ' de ', ' del ', ' en ', ' con ',
+      ' que ', ' por ', ' para ', ' está ', ' sobre ', ' jugador', ' mundo', ' juego', ' historia', ' puedes ', ' tu '];
+    let hits = 0;
+    for (const m of markers) if (low.includes(m)) hits++;
+    return hits >= 3;
+  }
+
+  // En locale es: si los datos de Steam no vienen en español (juegos sin
+  // traducción en la tienda), usa la descripción de Wikipedia en español.
+  async _wikiLocalized(info, name) {
+    if (!info || this._rawgLang() !== 'es') return info;
+    const text = info.detailedDescription || info.shortDescription || '';
+    if (!text || this._looksSpanish(text)) return info;
+    const wiki = await this._wikiSummary(name);
+    if (!wiki || !wiki.detailedDescription || !this._looksLikeGame(wiki)) return info;
+    return {
+      ...info,
+      shortDescription: wiki.shortDescription || info.shortDescription,
+      detailedDescription: wiki.detailedDescription,
+      about: wiki.about || info.about,
+      wikipediaFallback: true
+    };
+  }
+
+  // ¿La página de Wikipedia parece realmente de un videojuego?
+  _looksLikeGame(wiki) {
+    if (!wiki) return false;
+    if (wiki.coverUrl || wiki.banner) return true;
+    const title = String(wiki.wikiTitle || wiki.name || '').toLowerCase();
+    if (/(videojuego|video game|videogame|series|franquicia)/.test(title)) return true;
+    const text = String(wiki.detailedDescription || '').toLowerCase();
+    if (text.includes('videojuego') || text.includes('video game')) return true;
+    if (text.includes('es un juego') && text.includes('desarrollado')) return true;
+    const gameKinds = ['rpg', 'estrategia', ' rol', 'plataformas', 'aventura', 'aventuras', 'disparos',
+      'acción', 'lucha', 'survival', 'mundo abierto', 'sandbox', 'simulador', 'carreras', 'puzzle',
+      'plataforma', 'shooter', 'mazo', 'tablero', 'beat', 'arcade'];
+    if (text.includes('es un ') && gameKinds.some((k) => text.includes(k))) return true;
+    if (text.includes('juego') && text.includes('desarrollado por')) return true;
+    return false;
+  }
+
+  async _wikiSummary(name) {
+    if (!name) return null;
+    const cacheKey = `wiki:${this._rawgLang()}:${String(name).toLowerCase().trim()}`;
+    if (this.cache.has(cacheKey)) {
+      const hit = this.cache.get(cacheKey);
+      return hit && hit.source === 'wikipedia' ? hit : null;
+    }
+    const lang = this._rawgLang();
+    const fetchSummary = async (title) => {
+      const { status, body } = await httpGetJson(
+        `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`,
+        8000
+      );
+      if (status !== 200) return null;
+      try {
+        const d = JSON.parse(body);
+        if (!d || !d.pageid) return null;
+        const extract = String(d.extract || '').trim();
+        const firstSentence = extract.split(/(?<=[.!?])\s/)[0] || extract;
+        return {
+          wikiTitle: d.title || title,
+          name: d.title || name,
+          shortDescription: firstSentence.slice(0, 320),
+          detailedDescription: extract,
+          about: extract,
+          developers: [],
+          publishers: [],
+          genres: d.description ? [d.description] : [],
+          categories: [],
+          releaseDate: '',
+          comingSoon: false,
+          price: null,
+          isFree: false,
+          type: 'game',
+          metascore: null,
+          rating: null,
+          screenshot: (d.originalimage && d.originalimage.source) || (d.thumbnail && d.thumbnail.source) || '',
+          header: (d.thumbnail && d.thumbnail.source) || (d.originalimage && d.originalimage.source) || '',
+          coverUrl: (d.thumbnail && d.thumbnail.source) || (d.originalimage && d.originalimage.source) || '',
+          banner: (d.originalimage && d.originalimage.source) || (d.thumbnail && d.thumbnail.source) || '',
+          screenshots: [],
+          source: 'wikipedia',
+          platforms: []
+        };
+      } catch {
+        return null;
+      }
+    };
+
+    // Prefiere el artículo del videojuego (p.ej. "Sifu (videojuego)") frente a
+    // páginas de términos ambiguos que comparten el mismo nombre.
+    const candidates =
+      lang === 'es'
+        ? [name, `${name} (videojuego)`]
+        : [name, `${name} (video game)`, `${name} (series)`];
+
+    const best = (list) => {
+      const scored = list.filter(Boolean).map((cand, i) => ({
+        cand,
+        score: (i > 0 ? 40 : 0) + (cand.coverUrl ? 20 : 0) + (cand.detailedDescription.length >= 120 ? 20 : 0)
+      }));
+      scored.sort((a, b) => b.score - a.score);
+      return scored[0] ? scored[0].cand : null;
+    };
+
+    try {
+      const fetched = [];
+      for (const title of candidates) {
+        const item = await fetchSummary(title);
+        if (item) {
+          fetched.push(item);
+          if (candidates.indexOf(title) > 0) break;
+        }
+      }
+      const direct = best(fetched);
+      if (direct && this._looksLikeGame(direct)) {
+        // Rechaza artículos poco relevantes (específicamente: sin imagen y con
+        // extracto de diccionario) si existe una variante mejor en `fetched`.
+        this.cache.set(cacheKey, direct);
+        return direct;
+      }
+      const { status, body } = await httpGetJson(
+        `https://${lang}.wikipedia.org/api/rest_v1/search/page?q=${encodeURIComponent(name)}&limit=3`,
+        8000
+      );
+      if (status !== 200) return null;
+      const data = JSON.parse(body);
+      const pages = data.pages || [];
+      const alt = [];
+      for (const p of pages.slice(0, 3)) {
+        const item = await fetchSummary(String(p.title).replace(/_/g, ' '));
+        if (item && this._looksLikeGame(item) && item.detailedDescription.length >= 60 && !item.detailedDescription.startsWith('No debe confundirse')) {
+          alt.push(item);
+          if (alt.length >= 1 && (item.coverUrl || item.detailedDescription.length >= 150)) break;
+        }
+      }
+      const chosen = best(alt);
+      if (chosen) {
+        this.cache.set(cacheKey, chosen);
+        return chosen;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
   /* ── Steam fallback ── */
   async _findSteamIdByName(name) {
     const key = name ? String(name).toLowerCase().trim() : '';
@@ -187,7 +338,12 @@ class GameInfoService {
         const n = norm(i.name);
         let s = 0;
         if (normName && normName.length >= 3 && normName.includes(n)) s += 100;
-        if (normName && normName.length >= 3 && n.includes(normName)) s += 100;
+        if (normName && normName.length >= 3 && n.includes(normName)) {
+          s += 100;
+          // Un título mucho más largo que la consulta suele ser un falso
+          // positivo de subcadena (p.ej. "Undying" -> "Quern - Undying Thoughts").
+          if (n.length > normName.length + 8) s -= 70;
+        }
         if (normName && normName.startsWith(n)) s += 60;
         if (s > bestScore) {
           bestScore = s;
@@ -289,19 +445,21 @@ class GameInfoService {
     if (game.appId && /^\d{1,8}$/.test(String(game.appId))) {
       const info = await this._fetchSteamAppDetails(game.appId);
       if (info) {
-        this.cache.set(cacheKey, info);
-        return info;
+        const final = await this._wikiLocalized(info, game.name);
+        this.cache.set(cacheKey, final);
+        return final;
       }
     }
 
-    // 3) Steam by name (fallback)
+    // 3) Steam by name (fallback, solo con coincidencia fuerte)
     const appid = await this._findSteamIdByName(game.name);
     if (appid) {
       const info = await this._fetchSteamAppDetails(appid);
       if (info) {
-        if (this._scoreMatch(game.name, info.name) >= 60) {
-          this.cache.set(cacheKey, info);
-          return info;
+        if (this._scoreMatch(game.name, info.name) >= 100) {
+          const final = await this._wikiLocalized(info, game.name);
+          this.cache.set(cacheKey, final);
+          return final;
         }
         const mismatch = {
           name: game.name,
@@ -313,6 +471,14 @@ class GameInfoService {
         this.cache.set(cacheKey, mismatch);
         return mismatch;
       }
+    }
+
+    // 4) Wikipedia (sin clave): datos localizados para juegos de cualquier
+    //    plataforma (tiendas propias, consolas, etc.) aunque no estén en Steam.
+    const wikiInfo = await this._wikiSummary(game.name);
+    if (wikiInfo) {
+      this.cache.set(cacheKey, wikiInfo);
+      return wikiInfo;
     }
 
     const fallback = { name: game.name, shortDescription: '', detailedDescription: '', about: '' };

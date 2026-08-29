@@ -219,6 +219,16 @@ class ArtworkService {
       // ignore
     }
 
+    // 4) Wikipedia (sin clave): imagen real de cualquier juego, incluso si no
+    //    está en Steam ni requiere clave de RAWG/SGDB.
+    if (results.length === 0) {
+      try {
+        results.push(...(await this._searchWikipedia(gameName)));
+      } catch {
+        // ignore
+      }
+    }
+
     if (results.length === 0) {
       for (const appid of overrideIds) {
         const cover = this._steamStaticCover(appid);
@@ -363,6 +373,61 @@ class ArtworkService {
           relevance: score
         });
       }
+    }
+    return results;
+  }
+
+  // Última alternativa sin clave: imagen real desde Wikipedia (cualquier juego,
+  // sea de la tienda que sea, aunque no esté en Steam).
+  async _searchWikipedia(name) {
+    const results = [];
+    if (!name) return results;
+    const tryLang = async (lang) => {
+      const fetchSummary = async (title) => {
+        const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+        const { status, body } = await this._httpGetJson(url, 8000);
+        if (status !== 200) return null;
+        try {
+          const d = JSON.parse(body);
+          if (!d || !d.pageid) return null;
+          return {
+            title: d.title || title,
+            original: d.originalimage && d.originalimage.source,
+            thumb: d.thumbnail && d.thumbnail.source
+          };
+        } catch {
+          return null;
+        }
+      };
+      const candidates = lang === 'es'
+        ? [name, `${name} (videojuego)`, `${name} (videojuegos)`]
+        : [name, `${name} (video game)`, `${name} (game)`];
+      for (const title of candidates) {
+        const item = await fetchSummary(title);
+        if (item && (item.original || item.thumb)) {
+          return {
+            image: item.original || item.thumb,
+            thumbImage: item.thumb || item.original,
+            label: item.title
+          };
+        }
+      }
+      return null;
+    };
+
+    try {
+      const best = await tryLang('es');
+      const bestEn = best ? null : await tryLang('en');
+      const chosen = best || bestEn;
+      if (!chosen || !chosen.image) return results;
+      const push = (url, thumb, label) => {
+        if (!url || results.some((r) => r.url === url)) return;
+        results.push({ url, thumb: thumb || url, width: 1280, height: 720, source: 'wikipedia', label, isWide: true });
+      };
+      push(chosen.image, chosen.thumbImage, chosen.label);
+      push(chosen.thumbImage, chosen.image, chosen.label);
+    } catch {
+      // ignore
     }
     return results;
   }

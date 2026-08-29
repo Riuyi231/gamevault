@@ -137,6 +137,13 @@ function openGameProcess(game) {
     if (exePath) gameStore.updateGame(id, { exePath });
   }
 
+  // Juegos de Epic cuyo ejecutable es el bootstrap/launcher (p.ej. Fortnite):
+  // abrir el .exe del launcher directamente no inicia el juego; usa la URI.
+  if (game.source === 'epic' && game.launchUri && exePath) {
+    const leaf = String(exePath).toLowerCase();
+    if (/bootstrap|_launcher|launcher\.exe/.test(leaf)) exePath = null;
+  }
+
   if (exePath && fs.existsSync(exePath)) {
     try {
       const cwd = game.installDir || path.dirname(exePath);
@@ -163,7 +170,12 @@ function openGameProcess(game) {
     }
   }
 
-  return { success: false, error: t('main.exeNotFound') };
+  return {
+    success: false,
+    error: exePath
+      ? `${t('main.exeNotFound')}: ${exePath}`
+      : t('main.exeNotFound')
+  };
 }
 
 // Captures the primary screen and stores it as a PNG for a game's real-gameplay cover.
@@ -735,9 +747,16 @@ function setupIPC() {
     if (!game) return null;
     try {
       const info = await gameInfoService.fetchForGame(game);
-      // Persist a panoramic banner for the hero background when available
-      if (info && info.banner && game.id) {
-        gameStore.updateGame(game.id, { bannerUrl: info.banner });
+      // Persiste portada y banner panorámico obtenidos de internet (RAWG,
+      // Steam o Wikipedia) para que sobrevivan al siguiente análisis.
+      if (info && game.id) {
+        const base = gameStore.getGame(game.id);
+        if (!base || !base.hasLocalCover || base.hasLocalCover === undefined) {
+          const updates = {};
+          if (info.coverUrl) updates.coverUrl = info.coverUrl;
+          if (info.banner) updates.bannerUrl = info.banner;
+          if (Object.keys(updates).length > 0) gameStore.updateGame(game.id, updates);
+        }
       }
       return info;
     } catch (err) {

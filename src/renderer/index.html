@@ -141,6 +141,15 @@
           </button>
         </div>
 
+        <div class="sidebar-section">
+          <div class="sidebar-label" data-i18n="sidebar.emulators">Emuladores</div>
+          <button class="filter-btn" id="emulators-btn" title="" data-i18n-title="sidebar.emulatorsTitle" data-filter="" aria-pressed="false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="3"/><circle cx="8" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M5 3l.8 2M8.5 2.4l1.2 1.8" stroke-linecap="round"/></svg>
+            <span class="filter-label" data-i18n="sidebar.emulators">Emuladores</span>
+            <span class="filter-count" id="emulators-count">0</span>
+          </button>
+        </div>
+
         <div class="sidebar-section grow">
           <div class="sidebar-label" data-i18n="sidebar.folders">Carpetas</div>
           <div class="folders-header">
@@ -332,6 +341,27 @@
         <p data-i18n="consoles.subtitle">Explora tus juegos por plataforma. Haz clic en una consola para ver sus juegos; las consolas empaquetadas con ROMs pendientes también aparecen aquí.</p>
       </div>
       <div id="consoles-grid" class="consoles-grid"></div>
+    </div>
+  </section>
+
+  <!-- ═══════════ EMULATORS VIEW ═══════════ -->
+  <section id="emulators-view" aria-hidden="true">
+    <div class="consoles-topbar">
+      <button class="gp-back" id="emulators-back">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span data-i18n="gp.back">Biblioteca</span>
+      </button>
+      <span class="gp-topbar-label" data-i18n="emulators.label">Emuladores</span>
+      <div class="gp-topbar-spacer"></div>
+      <button class="btn-primary emulators-add" id="emulators-add" data-i18n="emu.addButton">Añadir emulador</button>
+    </div>
+    <div class="consoles-scroll">
+      <div class="consoles-head">
+        <span class="consoles-eyebrow" data-i18n="emulators.dashboard">Emuladores</span>
+        <h2 data-i18n="emulators.title">Consolas emuladas y su estado</h2>
+        <p data-i18n="emulators.subtitle">Los emuladores incluidos con GameVault (RetroArch, PCSX2 y Dolphin) se registran aquí automáticamente. Suelta tus ROMs en la carpeta de cada consola para ver juegos retro en la biblioteca.</p>
+      </div>
+      <div id="emulators-grid" class="emulators-grid"></div>
     </div>
   </section>
 

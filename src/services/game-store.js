@@ -125,6 +125,10 @@ class GameStore {
       if (existing) {
         kept.push({
           ...detected,
+          // Conserva portadas/banners obtenidos de internet cuando el análisis
+          // no devuelve uno propio (juegos de tiendas propias, epic, gog, etc.)
+          coverUrl: detected.coverUrl || existing.coverUrl || '',
+          bannerUrl: detected.bannerUrl || existing.bannerUrl || '',
           addedAt: existing.addedAt || detected.addedAt || Date.now(),
           lastPlayed: existing.lastPlayed || 0,
           playtimeMs: existing.playtimeMs || 0,
