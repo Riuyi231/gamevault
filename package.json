@@ -1,7 +1,7 @@
 {
   "name": "gamevault",
   "productName": "GameVault",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "GameVault - Modern multi-platform game launcher",
   "author": "Riuyi231",
   "main": "src/main.js",
@@ -9,7 +9,8 @@
     "start": "electron .",
     "build": "electron-builder --win",
     "release": "electron-builder --win --publish always",
-    "dist": "electron-builder --win --publish never"
+    "dist": "electron-builder --win --publish never",
+    "fetch-emulators": "powershell -ExecutionPolicy Bypass -File scripts/init-emulators.ps1"
   },
   "dependencies": {
     "chokidar": "^4.0.0",
@@ -45,6 +46,12 @@
       "src/**/*",
       "assets/icon.ico",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/emulators",
+        "to": "emulators"
+      }
     ],
     "directories": {
       "output": "dist"
