@@ -127,6 +127,7 @@ class GameInfoService {
         screenshot: (d.background_image || ''),
         header: (d.background_image || ''),
         coverUrl: (d.background_image || ''),
+        banner: (d.background_image || ''),
         metacritic: d.metacritic || null,
         rating: d.rating || null,
         source: 'rawg',
@@ -234,8 +235,10 @@ class GameInfoService {
         type: d.type,
         metascore: d.metacritic ? d.metacritic.score : null,
         screenshot: d.screenshots && d.screenshots[0] ? d.screenshots[0].path_full : '',
+        banner: d.screenshots && d.screenshots[0] ? d.screenshots[0].path_full : (d.header_image || ''),
         header: d.header_image || '',
         coverUrl: d.header_image || '',
+        banner: d.header_image || '',
         source: 'steam'
       };
       this.cache.set(cacheKey, info);

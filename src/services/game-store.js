@@ -103,6 +103,15 @@ class GameStore {
     return true;
   }
 
+  addPlaytime(id, ms) {
+    const idx = this.getGames().findIndex((g) => g.id === id);
+    if (idx === -1) return false;
+    const g = this._data.games[idx];
+    this._data.games[idx] = { ...g, playtimeMs: (g.playtimeMs || 0) + Math.max(0, Math.round(ms)) };
+    this._save();
+    return true;
+  }
+
   syncFromScan(detectedGames) {
     const detectedMap = new Map(detectedGames.map((g) => [g.id, g]));
     const current = this.getGames();
@@ -117,6 +126,8 @@ class GameStore {
           ...detected,
           addedAt: existing.addedAt || detected.addedAt || Date.now(),
           lastPlayed: existing.lastPlayed || 0,
+          playtimeMs: existing.playtimeMs || 0,
+          isManual: existing.isManual || false,
           hasLocalCover: existing.hasLocalCover || false,
           localCoverPath: existing.localCoverPath || ''
         });
@@ -125,13 +136,18 @@ class GameStore {
           ...detected,
           addedAt: detected.addedAt || Date.now(),
           lastPlayed: 0,
+          playtimeMs: 0,
+          isManual: false,
           hasLocalCover: false,
           localCoverPath: ''
         });
       }
     }
 
-    this._data.games = [...kept, ...newGames];
+    // Preserve manually added games that the scan no longer detects
+    const manualKeep = current.filter((g) => g.isManual && !detectedMap.has(g.id));
+
+    this._data.games = [...kept, ...newGames, ...manualKeep];
     this._data.lastScan = Date.now();
     this._save();
 

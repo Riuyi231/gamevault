@@ -172,6 +172,7 @@
               <option value="name">Nombre</option>
               <option value="platform">Plataforma</option>
               <option value="recent">Recientes</option>
+              <option value="mostplayed">Más jugado</option>
             </select>
             <div class="columns-ctrl" title="Columnas">
               <button class="col-btn" id="col-minus" title="Menos columnas">−</button>
@@ -407,6 +408,24 @@
             <div class="drawer-actions">
               <button class="btn-primary" id="emu-add">Añadir emulador</button>
             </div>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-label">Añadir juego manualmente</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-name">Juego no detectado</div>
+              <div class="setting-desc">Agrega un ejecutable que el análisis no haya encontrado.</div>
+            </div>
+          </div>
+          <input type="text" id="manual-name" class="emu-input" placeholder="Nombre del juego" autocomplete="off" spellcheck="false">
+          <div class="emu-path-row">
+            <input type="text" id="manual-exe" class="emu-input" placeholder="Ruta al ejecutable (.exe)" readonly autocomplete="off" spellcheck="false">
+            <button class="btn-secondary emu-pick" id="manual-pick-exe" title="Seleccionar ejecutable">…</button>
+          </div>
+          <div class="drawer-actions">
+            <button class="btn-primary" id="manual-add">Añadir juego</button>
           </div>
         </div>
 

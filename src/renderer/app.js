@@ -421,6 +421,9 @@
       case 'recent':
         games.sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
         break;
+      case 'mostplayed':
+        games.sort((a, b) => (b.playtimeMs || 0) - (a.playtimeMs || 0));
+        break;
       default:
         games.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
         break;
@@ -571,6 +574,17 @@
     }
     if (game.coverUrl) return game.coverUrl;
     return 'default-cover.svg';
+  }
+
+  // Panoramic landscape background (hero/home/arcade). Falls back to the cover.
+  function getBannerSrc(game) {
+    if (game.bannerUrl) return game.bannerUrl;
+    const cached = state.detailCache.get(game.id);
+    if (cached && cached.banner) return cached.banner;
+    if (game.appId && /^\d{1,8}$/.test(String(game.appId))) {
+      return `https://cdn.akamai.steamstatic.com/steam/apps/${game.appId}/header.jpg`;
+    }
+    return getCoverSrc(game);
   }
 
   function esc(str) {
@@ -735,6 +749,9 @@
 
     const desc = $('#detail-desc');
     const game = state.allGames.find((g) => g.id === id);
+    if (game && info && info.banner && !game.bannerUrl) {
+      game.bannerUrl = info.banner;
+    }
     if (info && (info.detailedDescription || info.about || info.shortDescription)) {
       const descText = info.detailedDescription || info.about || info.shortDescription || '';
       desc.className = 'detail-desc';
@@ -763,6 +780,9 @@
       if (game.lastPlayed) {
         const d = new Date(game.lastPlayed);
         lines.push(`Último lanzamiento: <b>${d.toLocaleDateString('es-ES')}</b>.`);
+      }
+      if (game.playtimeMs > 0) {
+        lines.push(`Tiempo jugado: <b>${formatPlaytime(game.playtimeMs)}</b>.`);
       }
       lines.push(
         'La información detallada de este título no está disponible en la biblioteca de Steam. Puedes buscar una carátula en línea desde el menú contextual.'
@@ -797,6 +817,9 @@
     if (game && game.sizeOnDisk) {
       rows.push(metaRow('Tamaño', `${(game.sizeOnDisk / 1073741824).toFixed(1)} GB`));
     }
+    if (game && game.playtimeMs > 0) {
+      rows.push(metaRow('Tiempo jugado', formatPlaytime(game.playtimeMs)));
+    }
     if (info && info.metascore) {
       rows.push(`<div class="meta-row"><span class="meta-key">Metacritic</span><span class="meta-val"><span class="meta-score">${esc(info.metascore)}</span></span></div>`);
     }
@@ -813,6 +836,16 @@
 
   function metaRow(key, val) {
     return `<div class="meta-row"><span class="meta-key">${key}</span><span class="meta-val">${val}</span></div>`;
+  }
+
+  function formatPlaytime(ms) {
+    const totalMin = Math.round((ms || 0) / 60000);
+    if (totalMin < 1) return 'Menos de 1 min';
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h === 0) return `${m} min`;
+    if (m === 0) return `${h} h`;
+    return `${h} h ${m} min`;
   }
 
   /* ═══════════════ LAUNCH ═══════════════ */
@@ -877,13 +910,14 @@
     const shimmer = $('.hero-shimmer');
 
     const coverSrc = getCoverSrc(game);
+    const bannerSrc = getBannerSrc(game);
     img.classList.remove('loaded');
     shimmer.classList.remove('done');
     const loadCover = (url) => {
       img.onload = () => {
         shimmer.classList.add('done');
         img.classList.add('loaded');
-        bg.style.backgroundImage = `url("${url}")`;
+        bg.style.backgroundImage = `url("${bannerSrc}")`;
       };
       img.onerror = () => {
         shimmer.classList.add('done');
@@ -891,10 +925,10 @@
         bg.style.backgroundImage = '';
       };
       if (img.src !== url) img.src = url;
-      else { shimmer.classList.add('done'); img.classList.add('loaded'); bg.style.backgroundImage = `url("${url}")`; }
+      else { shimmer.classList.add('done'); img.classList.add('loaded'); bg.style.backgroundImage = `url("${bannerSrc}")`; }
     };
     loadCover(coverSrc);
-    if (coverSrc === 'default-cover.svg') bg.style.backgroundImage = '';
+    if (bannerSrc === 'default-cover.svg') bg.style.backgroundImage = '';
 
     $('#hero-title').textContent = game.name;
     $('#hero-platform').textContent = platformLabelOf(game);
@@ -915,7 +949,14 @@
         .then((res) => {
           const info = res && (res.shortDescription !== undefined) ? res : null;
           if (info) state.detailCache.set(id, info);
-          if (state.selectedId === id && info) desc.textContent = info.shortDescription || '';
+          if (state.selectedId === id && info) {
+            desc.textContent = info.shortDescription || '';
+            if (info.banner) {
+              const g = state.allGames.find((x) => x.id === id);
+              if (g) g.bannerUrl = info.banner;
+              $('#hero-bg').style.backgroundImage = `url("${info.banner}")`;
+            }
+          }
         })
         .catch(() => {});
     }
@@ -954,6 +995,7 @@
     const img = $('#home-cover-img');
     const shimmer = $('.home-shimmer');
     const coverSrc = getCoverSrc(game);
+    const bannerSrc = getBannerSrc(game);
 
     img.classList.remove('loaded');
     shimmer.classList.remove('done');
@@ -961,17 +1003,17 @@
       img.onload = () => {
         shimmer.classList.add('done');
         img.classList.add('loaded');
-        bg.style.backgroundImage = `url("${url}")`;
+        bg.style.backgroundImage = `url("${bannerSrc}")`;
       };
       img.onerror = () => {
         if (url !== 'default-cover.svg') loadCover('default-cover.svg');
         else { shimmer.classList.add('done'); img.classList.add('loaded'); bg.style.backgroundImage = ''; }
       };
       if (img.src !== url) img.src = url;
-      else { shimmer.classList.add('done'); img.classList.add('loaded'); bg.style.backgroundImage = `url("${url}")`; }
+      else { shimmer.classList.add('done'); img.classList.add('loaded'); bg.style.backgroundImage = `url("${bannerSrc}")`; }
     };
     loadCover(coverSrc);
-    if (coverSrc === 'default-cover.svg') bg.style.backgroundImage = '';
+    if (bannerSrc === 'default-cover.svg') bg.style.backgroundImage = '';
 
     $('#home-title').textContent = game.name;
     $('#home-play').innerHTML =
@@ -1010,8 +1052,10 @@
       img.src = getCoverSrc(g);
       img.onerror = () => { img.src = 'default-cover.svg'; };
       const info = document.createElement('div');
+      const metaParts = [platformLabelOf(g)];
+      if (g.playtimeMs > 0) metaParts.push(formatPlaytime(g.playtimeMs));
       info.innerHTML = `<div class="home-recent-name">${esc(g.name)}</div>` +
-        `<div class="home-recent-meta">${esc(platformLabelOf(g))}</div>`;
+        `<div class="home-recent-meta">${metaParts.map(esc).join(' · ')}</div>`;
       item.appendChild(img);
       item.appendChild(info);
       item.addEventListener('click', () => { exitHome(g); });
@@ -1073,6 +1117,7 @@
     const cover = $('#arcade-cover');
     const shimmer = $('.arcade-shimmer');
     const coverSrc = getCoverSrc(game);
+    const bannerSrc = getBannerSrc(game);
 
     cover.classList.remove('loaded');
     shimmer.classList.remove('done');
@@ -1080,7 +1125,7 @@
       cover.onload = () => {
         shimmer.classList.add('done');
         cover.classList.add('loaded');
-        bg.style.backgroundImage = `url("${url}")`;
+        bg.style.backgroundImage = `url("${bannerSrc}")`;
       };
       cover.onerror = () => {
         if (url !== 'default-cover.svg') loadCover('default-cover.svg');
@@ -1091,10 +1136,10 @@
         }
       };
       if (cover.src !== url) cover.src = url;
-      else { shimmer.classList.add('done'); cover.classList.add('loaded'); bg.style.backgroundImage = `url("${url}")`; }
+      else { shimmer.classList.add('done'); cover.classList.add('loaded'); bg.style.backgroundImage = `url("${bannerSrc}")`; }
     };
     loadCover(coverSrc);
-    if (coverSrc === 'default-cover.svg') bg.style.backgroundImage = '';
+    if (bannerSrc === 'default-cover.svg') bg.style.backgroundImage = '';
 
     $('#arcade-title').textContent = game.name;
     $('#arcade-platform').textContent = platformLabelOf(game);
@@ -1621,6 +1666,7 @@
     if (platform) details.push(`${platformLabelOf(game)}`);
     if (game.installDir) details.push(`Ubicación: ${game.installDir}`);
     if (game.sizeOnDisk) details.push(`Tamaño: ${(game.sizeOnDisk / 1073741824).toFixed(1)} GB`);
+    if (game.playtimeMs > 0) details.push(`Jugado: ${formatPlaytime(game.playtimeMs)}`);
     if (!game.exePath && !game.launchUri && !game.romPath) details.push('Ejecutable no encontrado');
     if (game.lastPlayed) {
       const d = new Date(game.lastPlayed);
@@ -1851,6 +1897,38 @@
     } catch (err) {
       console.error('Add emulator failed:', err);
       toast('No se pudo añadir el emulador', 'error');
+    }
+  });
+
+  /* ── Juego manual ── */
+  $('#manual-pick-exe').addEventListener('click', async () => {
+    try {
+      const p = await api.selectExecutable();
+      if (!p) return;
+      $('#manual-exe').value = p;
+      const nameInput = $('#manual-name');
+      if (!nameInput.value.trim()) {
+        nameInput.value = pathLeaf(p).replace(/\.exe$/i, '');
+      }
+    } catch (err) {
+      console.error('Pick game exe failed:', err);
+    }
+  });
+
+  $('#manual-add').addEventListener('click', async () => {
+    const name = $('#manual-name').value.trim();
+    const exePath = $('#manual-exe').value.trim();
+    if (!name) { toast('Escribe el nombre del juego', 'error'); return; }
+    if (!exePath) { toast('Selecciona el ejecutable del juego', 'error'); return; }
+    try {
+      const game = await api.addGame({ name, exePath, source: 'custom', platform: 'custom', isManual: true });
+      $('#manual-name').value = '';
+      $('#manual-exe').value = '';
+      toast(`Juego añadido: ${game.name}`, 'success');
+      await loadGames();
+    } catch (err) {
+      console.error('Add game failed:', err);
+      toast('No se pudo añadir el juego', 'error');
     }
   });
 

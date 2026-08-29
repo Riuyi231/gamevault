@@ -27,6 +27,47 @@ let rescansSinceScan = 0;
 const log = (...args) => console.log('[GameVault]', ...args);
 const logError = (...args) => console.error('[GameVault]', ...args);
 
+/* ─────────────────────────── PLAYTIME ─────────────────────────── */
+
+// Track running sessions to accumulate playtime. For native/emulator launches we
+// have a PID we can poll; for launcher-URI launches (Steam/Epic) we flush the
+// session on the next launch of the same game or when the app quits.
+const playSessions = new Map(); // id -> { startedAt, pids, uri }
+
+function endPlaySession(id, now = Date.now()) {
+  const s = playSessions.get(id);
+  if (!s) return;
+  playSessions.delete(id);
+  const elapsed = Math.max(0, now - s.startedAt);
+  if (elapsed >= 1000 && gameStore) gameStore.addPlaytime(id, elapsed);
+}
+
+function startPlaySession(game, pid, uri = false) {
+  const id = game && game.id;
+  if (!id) return;
+  endPlaySession(id); // flush any previous session for the same game
+  playSessions.set(id, { startedAt: Date.now(), pids: pid ? new Set([pid]) : new Set(), uri });
+}
+
+function tickPlaySessions() {
+  const now = Date.now();
+  for (const id of Array.from(playSessions.keys())) {
+    const s = playSessions.get(id);
+    if (!s || s.uri) continue; // URI sessions are flushed on quit / next launch
+    if (s.pids.size === 0) { endPlaySession(id, now); continue; }
+    let alive = false;
+    for (const pid of s.pids) {
+      try {
+        process.kill(pid, 0);
+        alive = true;
+      } catch {
+        // process no longer exists
+      }
+    }
+    if (!alive) endPlaySession(id, now);
+  }
+}
+
 function splitArgs(input) {
   const result = [];
   const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
@@ -253,6 +294,7 @@ function setupIPC() {
           const child = spawn(emuPath, args, { cwd, detached: true, stdio: 'ignore' });
           child.unref();
           gameStore.updateGame(id, { lastPlayed: Date.now(), exePath: emuPath });
+          startPlaySession(game, child.pid);
           log('Launched (retro):', game.name, emuPath, '->', game.romPath);
           return { success: true };
         } catch (err) {
@@ -268,6 +310,7 @@ function setupIPC() {
         const child = spawn(exePath, [], { cwd, detached: true, stdio: 'ignore' });
         child.unref();
         gameStore.updateGame(id, { lastPlayed: Date.now() });
+        startPlaySession(game, child.pid);
         log('Launched:', game.name, exePath);
         return { success: true };
       } catch (err) {
@@ -279,6 +322,7 @@ function setupIPC() {
       try {
         shell.openExternal(game.launchUri);
         gameStore.updateGame(id, { lastPlayed: Date.now() });
+        startPlaySession(game, null, true);
         log('Launched via launcher URI:', game.name, game.launchUri);
         return { success: true, viaLauncher: true };
       } catch (err) {
@@ -307,6 +351,8 @@ function setupIPC() {
       launchUri: data.launchUri || '',
       lastPlayed: 0,
       addedAt: Date.now(),
+      playtimeMs: 0,
+      isManual: false,
       hasLocalCover: false,
       localCoverPath: '',
       ...data
@@ -467,6 +513,10 @@ function setupIPC() {
     if (!game) return null;
     try {
       const info = await gameInfoService.fetchForGame(game);
+      // Persist a panoramic banner for the hero background when available
+      if (info && info.banner && game.id) {
+        gameStore.updateGame(game.id, { bannerUrl: info.banner });
+      }
       return info;
     } catch (err) {
       logError('get-game-info error:', err.message || err);
@@ -524,7 +574,14 @@ app.whenReady().then(async () => {
   setupIPC();
   startPeriodicRescan();
 
+  setInterval(tickPlaySessions, 5000);
+
   setTimeout(() => runScan(), 150);
+});
+
+app.on('before-quit', () => {
+  const now = Date.now();
+  for (const id of Array.from(playSessions.keys())) endPlaySession(id, now);
 });
 
 app.on('window-all-closed', () => {
