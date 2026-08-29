@@ -2141,6 +2141,72 @@
 
   $('#btn-check-updates').addEventListener('click', checkForUpdates);
 
+  /* ═══════════════ AUTO-UPDATE BANNER ═══════════════ */
+  function initAutoUpdateBanner() {
+    const banner = $('#update-banner');
+    const text = $('#update-banner-text');
+    const icon = $('#update-banner-icon');
+    const restartBtn = $('#update-banner-btn');
+    const dismiss = $('#update-banner-dismiss');
+    if (!banner || !text || !icon || !restartBtn || !dismiss) return;
+
+    const show = (state) => {
+      banner.classList.remove('hidden');
+      banner.className = 'show';
+      if (state) banner.classList.add(state);
+      banner.setAttribute('aria-hidden', 'false');
+    };
+    const hide = () => {
+      banner.classList.remove('show');
+      banner.classList.add('hidden');
+      banner.setAttribute('aria-hidden', 'true');
+    };
+
+    dismiss.addEventListener('click', hide);
+
+    restartBtn.addEventListener('click', () => {
+      restartBtn.disabled = true;
+      restartBtn.textContent = 'Actualizando…';
+      api.installUpdate().catch(() => {
+        restartBtn.disabled = false;
+        restartBtn.textContent = 'Reiniciar y actualizar';
+      });
+    });
+
+    api.onUpdateStatus((st) => {
+      if (!st) return;
+      if (st.type === 'not-available') return;
+      if (st.type === 'error') {
+        text.textContent = st.error || 'Error al comprobar la actualización.';
+        icon.textContent = '!';
+        restartBtn.classList.add('hidden');
+        show('err');
+        return;
+      }
+      if (st.type === 'available') {
+        icon.textContent = '↓';
+        text.textContent = `Nueva versión ${st.version || ''} disponible. Descargando…`;
+        restartBtn.classList.add('hidden');
+        show('');
+        return;
+      }
+      if (st.type === 'downloading') {
+        icon.textContent = `${st.percent || 0}%`;
+        text.textContent = `Descargando actualización… ${st.percent || 0}%`;
+        show('');
+        return;
+      }
+      if (st.type === 'downloaded') {
+        icon.textContent = '✓';
+        text.textContent = `Actualización ${st.version || ''} lista. Reinicia para aplicar los cambios.`;
+        restartBtn.classList.remove('hidden');
+        show('done');
+      }
+    });
+  }
+
+  initAutoUpdateBanner();
+
   async function loadSettings() {
     try {
       const settings = await api.getSettings();

@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const chokidar = require('chokidar');
+const { autoUpdater } = require('electron-updater');
 const GameDetector = require('./services/game-detect');
 const GameStore = require('./services/game-store');
 const ArtworkService = require('./services/artwork');
@@ -421,6 +422,26 @@ function setupIPC() {
     return true;
   });
 
+  ipcMain.handle('download-update', async () => {
+    if (!app.isPackaged) return { error: 'Solo disponible en la versión instalada.' };
+    try {
+      autoUpdater.downloadUpdate();
+      return { ok: true };
+    } catch (err) {
+      return { error: err && err.message ? err.message : 'No se pudo iniciar la descarga.' };
+    }
+  });
+
+  ipcMain.handle('install-update', async () => {
+    if (!app.isPackaged) return { error: 'Solo disponible en la versión instalada.' };
+    try {
+      autoUpdater.quitAndInstall(false, true);
+      return { ok: true };
+    } catch (err) {
+      return { error: err && err.message ? err.message : 'No se pudo instalar.' };
+    }
+  });
+
   ipcMain.handle('set-cover', async (event, id, dataUrlOrUrl) => {
     const saved = await artworkService.saveCover(id, dataUrlOrUrl);
     if (saved) {
@@ -550,6 +571,72 @@ function setupIPC() {
   });
 }
 
+/* ─────────────────────────── AUTO-UPDATE ─────────────────────────── */
+
+const sendUpdateStatus = (state) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-status', state);
+  }
+};
+
+function setupAutoUpdater() {
+  if (!app.isPackaged) {
+    log('AutoUpdate: saltado (aplicación no empaquetada).');
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowDowngrade = false;
+
+  try {
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: process.env.GAMEVAULT_UPDATE_REPO
+        ? process.env.GAMEVAULT_UPDATE_REPO.split('/')[0]
+        : 'Riuyi231',
+      repo: process.env.GAMEVAULT_UPDATE_REPO
+        ? process.env.GAMEVAULT_UPDATE_REPO.split('/')[1]
+        : 'gamevault'
+    });
+  } catch (err) {
+    logError('AutoUpdate: feed no configurado, usando app-update.yml.', err && err.message);
+  }
+
+  autoUpdater.on('update-available', (info) => {
+    log('AutoUpdate: nueva versión', info && info.version);
+    sendUpdateStatus({ type: 'available', version: info && info.version });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    sendUpdateStatus({ type: 'not-available' });
+  });
+
+  autoUpdater.on('download-progress', (p) => {
+    const percent = p && typeof p.percent === 'number' ? Math.round(p.percent) : 0;
+    sendUpdateStatus({ type: 'downloading', percent });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    log('AutoUpdate: descarga completada', info && info.version);
+    sendUpdateStatus({ type: 'downloaded', version: info && info.version });
+  });
+
+  autoUpdater.on('error', (err) => {
+    logError('AutoUpdate: error', err && (err.message || err));
+    sendUpdateStatus({
+      type: 'error',
+      error: err && err.message ? err.message : String(err)
+    });
+  });
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      logError('AutoUpdate: comprobación fallida', err && (err.message || err));
+    });
+  }, 15000);
+}
+
 /* ─────────────────────────── LIFECYCLE ─────────────────────────── */
 
 app.whenReady().then(async () => {
@@ -573,6 +660,7 @@ app.whenReady().then(async () => {
   createWindow();
   setupIPC();
   startPeriodicRescan();
+  setupAutoUpdater();
 
   setInterval(tickPlaySessions, 5000);
 
