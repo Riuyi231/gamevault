@@ -1,5 +1,6 @@
 const https = require('https');
 const { app } = require('electron');
+const I18N = require('../i18n/dict');
 
 function httpGetJson(url, timeoutMs = 12000) {
   return new Promise((resolve) => {
@@ -43,7 +44,16 @@ function compareVersions(a, b) {
 
 class UpdaterService {
   constructor(repo) {
+    this.setLocale();
     this.setRepo(repo);
+  }
+
+  setLocale(locale) {
+    this.locale = I18N.LOCALES[locale] ? locale : I18N.DEFAULT_LOCALE;
+  }
+
+  t(key, vars) {
+    return I18N.t(this.locale, key, vars);
   }
 
   setRepo(repo) {
@@ -52,20 +62,20 @@ class UpdaterService {
 
   async checkForUpdates() {
     if (!this.repo || !this.repo.includes('/')) {
-      return { error: 'No hay repositorio configurado para actualizaciones.' };
+      return { error: this.t('main.noRepo') };
     }
     try {
       const { status, body } = await httpGetJson(
         `https://api.github.com/repos/${encodeURIComponent(this.repo)}/releases/latest`
       );
       if (status !== 200) {
-        return { error: `No se pudo contactar con GitHub (${status}). Verifica que exista una release en ${this.repo}.` };
+        return { error: this.t('main.updateContactFail', { status, repo: this.repo }) };
       }
       const release = JSON.parse(body);
       const latestVersion = parseVersion(release.tag_name);
       const currentVersion = parseVersion(app.getVersion());
       if (!latestVersion) {
-        return { error: 'La última release no tiene una etiqueta de versión válida.' };
+        return { error: this.t('main.updateBadTag') };
       }
       const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
       const setupAsset =
@@ -84,7 +94,7 @@ class UpdaterService {
         publishedAt: release.published_at || ''
       };
     } catch (err) {
-      return { error: 'Error al comprobar actualizaciones: ' + (err && err.message ? err.message : 'desconocido') };
+      return { error: this.t('main.updateCheckError', { msg: err && err.message ? err.message : this.t('main.updateUnknown') }) };
     }
   }
 }

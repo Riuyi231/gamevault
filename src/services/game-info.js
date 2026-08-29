@@ -1,5 +1,6 @@
 const https = require('https');
 const http = require('http');
+const I18N = require('../i18n/dict');
 
 function warn(...args) {
   if (process.env.GAMEVAULT_DEBUG) console.warn('[GameInfo]', ...args);
@@ -56,6 +57,19 @@ class GameInfoService {
     this.cache = new Map();
     this.steamIdCache = new Map();
     this.rawgKey = '';
+    this.setLocale();
+  }
+
+  setLocale(locale) {
+    this.locale = I18N.LOCALES[locale] ? locale : I18N.DEFAULT_LOCALE;
+  }
+
+  _rawgLang() {
+    return this.locale === 'en' ? 'en' : 'es';
+  }
+
+  _steamParams() {
+    return this.locale === 'en' ? 'cc=us&l=english' : 'cc=es&l=espanol';
   }
 
   setRawgKey(key) {
@@ -68,7 +82,7 @@ class GameInfoService {
     try {
       const q = encodeURIComponent(name);
       const { status, body } = await httpGetJson(
-        `https://api.rawg.io/api/games?key=${encodeURIComponent(this.rawgKey)}&search=${q}&lang=es&page_size=8&search_precise=true`,
+        `https://api.rawg.io/api/games?key=${encodeURIComponent(this.rawgKey)}&search=${q}&lang=${this._rawgLang()}&page_size=8&search_precise=true`,
         9000
       );
       if (status !== 200) return null;
@@ -156,7 +170,7 @@ class GameInfoService {
       const { status, body } = await httpGetJson(
         `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(
           name
-        )}&cc=es&l=espanol&v=1`,
+        )}&${this._steamParams()}&v=1`,
         8000
       );
       if (status !== 200) return null;
@@ -205,7 +219,7 @@ class GameInfoService {
     if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
     try {
       const { status, body } = await httpGetJson(
-        `https://store.steampowered.com/api/appdetails?appids=${encodeURIComponent(appid)}&l=espanol&cc=es`,
+        `https://store.steampowered.com/api/appdetails?appids=${encodeURIComponent(appid)}&${this._steamParams()}`,
         10000
       );
       if (status !== 200) return null;

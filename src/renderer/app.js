@@ -71,7 +71,10 @@
     detailCache: new Map(),
     arcade: false,
     arcadeIndex: -1,
-    consolesOpen: false
+    consolesOpen: false,
+    locale: window.GV_I18N ? window.GV_I18N.DEFAULT_LOCALE : 'es',
+    customFolders: [],
+    emulators: []
   };
 
   const GAMEPAD = {
@@ -171,15 +174,29 @@
     return { move, select, launch, back, error, setMuted, isMuted, unlock };
   })();
 
-  const FILTER_ORDER = ['all', 'steam', 'epic', 'gog', 'retro', 'other'];
-  const PLATFORM_LABELS = { steam: 'Steam', epic: 'Epic', gog: 'GOG', retro: 'Retro', other: 'Otro' };
+  const FILTER_ORDER = ['all', 'steam', 'epic', 'gog', 'xbox', 'retro', 'other'];
+  const PLATFORM_LABELS = { steam: 'Steam', epic: 'Epic', gog: 'GOG', xbox: 'Xbox', retro: 'Retro', other: 'Otro' };
+
+  /* ═══════════════ I18N ═══════════════ */
+  const I18N = window.GV_I18N || { LOCALES: {}, DICT: { es: {}, en: {} }, t: (l, k) => k, DEFAULT_LOCALE: 'es' };
+  function T(key, vars) {
+    return I18N.t(state.locale, key, vars);
+  }
+  function applyI18n() {
+    $$('[data-i18n]').forEach((el) => { el.textContent = T(el.getAttribute('data-i18n')); });
+    $$('[data-i18n-inner]').forEach((el) => { el.innerHTML = T(el.getAttribute('data-i18n-inner')); });
+    $$('[data-i18n-title]').forEach((el) => { el.title = T(el.getAttribute('data-i18n-title')); });
+    $$('[data-i18n-placeholder]').forEach((el) => { el.placeholder = T(el.getAttribute('data-i18n-placeholder')); });
+    $$('[data-i18n-aria-label]').forEach((el) => { el.setAttribute('aria-label', T(el.getAttribute('data-i18n-aria-label'))); });
+    document.documentElement.lang = state.locale;
+  }
 
   function platformKeyOf(game) {
     return (game && game.source) === 'retro' ? 'retro' : (game.platform || game.source || 'other');
   }
   function platformLabelOf(game) {
     if (game && game.source === 'retro' && game.platform) return game.platform;
-    return PLATFORM_LABELS[platformKeyOf(game)] || 'Otro';
+    return T('platform.' + platformKeyOf(game));
   }
 
   /* ═══════════════ SPLASH ═══════════════ */
@@ -199,7 +216,7 @@
     if (state.splashDone) return;
     state.splashDone = true;
     if (state.splashFinishTimer) clearTimeout(state.splashFinishTimer);
-    updateSplash(100, 'Listo');
+    updateSplash(100, T('splash.ready'));
     setTimeout(() => {
       splash.classList.add('faded');
       const app = $('#app');
@@ -230,7 +247,7 @@
   function setFilter(filter) {
     state.filter = filter;
     $$('.filter-btn').forEach((b) => b.classList.toggle('active', b.dataset.filter === filter));
-    const chipLabel = filter === 'all' ? '' : (PLATFORM_LABELS[filter] || filter);
+    const chipLabel = filter === 'all' ? '' : (PLATFORM_LABELS[filter] ? T('platform.' + filter) : filter);
     $('#filter-chip').classList.toggle('hidden', !chipLabel);
     $('#filter-chip-label').textContent = chipLabel;
     applyVisible();
@@ -296,13 +313,13 @@
     const btn = $('#refresh-btn');
     btn.classList.add('spinning');
     try {
-      toast('Analizando juegos...');
+      toast(T('scan.refreshing'));
       await api.rescan();
       await loadGames();
-      toast('Biblioteca actualizada', 'success');
+      toast(T('scan.libraryUpdated'), 'success');
     } catch (err) {
       console.error('Rescan failed:', err);
-      toast('No se pudo analizar la biblioteca', 'error');
+      toast(T('scan.scanFailed'), 'error');
     } finally {
       setTimeout(() => btn.classList.remove('spinning'), 400);
     }
@@ -349,39 +366,37 @@
   async function deleteGameFromDisk(game) {
     if (!game) return;
     if (!game.installDir) {
-      toast('Este juego no tiene una ubicación local para eliminar', 'error');
+      toast(T('delete.noLocation'), 'error');
       return;
     }
-    const name = game.name || 'este juego';
+    const name = game.name || T('delete.thisGame');
     const sizeText = game.sizeOnDisk ? ` (${(game.sizeOnDisk / 1073741824).toFixed(1)} GB)` : '';
-    const ok = confirm(
-      `¿Eliminar "${name}"${sizeText} de tu PC?\n\nSe moverá a la Papelera de reciclaje.` +
-        `\nUbicación: ${game.installDir}\n\nEsta acción no se puede deshacer fácilmente.`
-    );
+    const ok = confirm(T('delete.confirm', { name, size: sizeText, path: game.installDir }));
     if (!ok) return;
 
     try {
       const result = await api.deleteGameFromDisk(game.id);
       if (result && result.success) {
         removeGameFromState(game.id);
-        toast(`${game.name} eliminado de la PC`);
+        toast(T('delete.done', { name: game.name }));
       } else {
-        toast(`No se pudo eliminar: ${(result && result.error) || 'error'}`, 'error');
+        toast(T('delete.failed', { error: (result && result.error) || 'error' }), 'error');
       }
     } catch (err) {
       console.error('Delete error:', err);
-      toast('Error al eliminar el juego', 'error');
+      toast(T('delete.error'), 'error');
     }
   }
 
   function updateCounts() {
-    const counts = { all: state.allGames.length, steam: 0, epic: 0, gog: 0, retro: 0, other: 0 };
+    const counts = { all: state.allGames.length, steam: 0, epic: 0, gog: 0, xbox: 0, retro: 0, other: 0 };
     for (const g of state.allGames) {
       const p = g.platform || g.source;
       if (g.source === 'retro') counts.retro++;
       else if (p === 'steam') counts.steam++;
       else if (p === 'epic') counts.epic++;
       else if (p === 'gog') counts.gog++;
+      else if (p === 'xbox') counts.xbox++;
       else counts.other++;
     }
 
@@ -389,15 +404,17 @@
     $('#count-steam').textContent = counts.steam;
     $('#count-epic').textContent = counts.epic;
     $('#count-gog').textContent = counts.gog;
+    const countXbox = $('#count-xbox');
+    if (countXbox) countXbox.textContent = counts.xbox;
     const countRetro = $('#count-retro');
     if (countRetro) countRetro.textContent = counts.retro;
     $('#count-other').textContent = counts.other;
 
-    $('#game-count').textContent = `${counts.all} juego${counts.all !== 1 ? 's' : ''}`;
-    $('#stats-games').textContent = `${counts.all} juego${counts.all !== 1 ? 's' : ''}`;
+    $('#game-count').textContent = T('counts.games', { n: counts.all });
+    $('#stats-games').textContent = T('counts.games', { n: counts.all });
 
     const platformsPresent = FILTER_ORDER.slice(1).filter((p) => counts[p] > 0).length;
-    $('#stats-platforms').textContent = `${platformsPresent} plataforma${platformsPresent !== 1 ? 's' : ''}`;
+    $('#stats-platforms').textContent = T('counts.platforms', { n: platformsPresent });
   }
 
   function applyVisible() {
@@ -417,7 +434,7 @@
 
     switch (state.sort) {
       case 'platform': {
-        const order = { steam: 0, epic: 1, gog: 2, retro: 3, other: 4 };
+        const order = { steam: 0, epic: 1, gog: 2, xbox: 3, retro: 4, other: 5 };
         games.sort((a, b) => {
           const pa = order[a.platform || a.source] ?? 9;
           const pb = order[b.platform || b.source] ?? 9;
@@ -502,7 +519,7 @@
 
     const platformKey = platformKeyOf(game);
     const platformLabel = platformLabelOf(game);
-    const recentTag = isRecent(game) ? '<span class="game-card-new">Nuevo</span>' : '';
+    const recentTag = isRecent(game) ? '<span class="game-card-new">' + esc(T('badge.new')) + '</span>' : '';
 
     card.innerHTML = `
       <div class="game-card-cover">
@@ -747,9 +764,9 @@
     platEl.textContent = platformLabelOf(game);
     platEl.className = 'detail-platform ' + platformKey;
     $('#gp-source').textContent = game.source === 'retro'
-      ? 'Retro · ' + (game.platform || 'Emulador')
+      ? T('detail.source.retro', { platform: game.platform || T('emu.emulator') })
       : game.source === 'custom'
-        ? 'Añadido manualmente'
+        ? T('detail.source.manual')
         : (game.source || game.platform || platformKey);
 
     const recentEl = $('#gp-recent');
@@ -764,7 +781,7 @@
 
     const desc = $('#gp-desc');
     desc.className = 'gp-desc loading';
-    desc.innerHTML = '<div class="gp-desc-inner">Cargando información...</div>';
+    desc.innerHTML = `<div class="gp-desc-inner">${esc(T('detail.loading'))}</div>`;
 
     const id = game.id;
     const cached = state.detailCache.get(id);
@@ -799,35 +816,33 @@
       desc.innerHTML = `<div class="gp-desc-inner">${esc(descText)}</div>`;
     } else if (info && info.discoveredName && info.discoveredName !== game.name) {
       desc.className = 'gp-desc';
-      desc.innerHTML = `<div class="gp-desc-inner">Estás viendo la ficha de "<b>${esc(info.discoveredName)}</b>". Si no es el juego que buscas, usa el menú contextual para buscar una carátula o editar la información.</div>`;
+      desc.innerHTML = `<div class="gp-desc-inner">${T('detail.desc.discovered', { name: esc(info.discoveredName) })}</div>`;
     } else {
       const lines = [];
       if (game.source === 'retro') {
-        lines.push(`<b>${esc(game.name)}</b> es una ROM para <b>${esc(game.platform || 'emulador')}</b>.`);
+        lines.push(T('detail.desc.romLine', { name: esc(game.name), platform: esc(game.platform || T('emu.emulator')) }));
       } else {
-        lines.push(`<b>${esc(game.name)}</b> está instalado en tu PC.`);
+        lines.push(T('detail.desc.installed', { name: esc(game.name) }));
       }
       const platformKey = game.platform || game.source || 'other';
-      lines.push(`Plataforma: <b>${esc(platformLabelOf(game))}</b>.`);
+      lines.push(T('detail.desc.platform', { label: esc(platformLabelOf(game)) }));
       if (game.romPath) {
-        lines.push(`ROM: <span class="desc-path">${esc(game.romPath)}</span>.`);
+        lines.push(T('detail.desc.rom', { path: esc(game.romPath) }));
       }
       if (game.sizeOnDisk) {
-        lines.push(`Ocupa <b>${(game.sizeOnDisk / 1073741824).toFixed(1)} GB</b> en disco.`);
+        lines.push(T('detail.desc.size', { size: (game.sizeOnDisk / 1073741824).toFixed(1) }));
       }
       if (game.installDir) {
-        lines.push(`Ubicación: <span class="desc-path">${esc(game.installDir)}</span>.`);
+        lines.push(T('detail.desc.location', { path: esc(game.installDir) }));
       }
       if (game.lastPlayed) {
         const d = new Date(game.lastPlayed);
-        lines.push(`Último lanzamiento: <b>${d.toLocaleDateString('es-ES')}</b>.`);
+        lines.push(T('detail.desc.lastPlayed', { date: esc(d.toLocaleDateString(localeTag())) }));
       }
       if (game.playtimeMs > 0) {
-        lines.push(`Tiempo jugado: <b>${formatPlaytime(game.playtimeMs)}</b>.`);
+        lines.push(T('detail.desc.playtime', { time: esc(formatPlaytime(game.playtimeMs)) }));
       }
-      lines.push(
-        'La información detallada de este título no está disponible en la biblioteca de Steam. Puedes buscar una carátula en línea desde el menú contextual.'
-      );
+      lines.push(T('detail.desc.noInfo'));
       desc.className = 'gp-desc';
       desc.innerHTML = `<div class="gp-desc-inner">${lines.join('<br>')}</div>`;
     }
@@ -881,13 +896,13 @@
     const meta = $('#gp-meta');
     const stats = [];
 
-    if (info && info.releaseDate) stats.push(stat('Lanzamiento', esc(info.releaseDate)));
+    if (info && info.releaseDate) stats.push(stat(T('meta.release'), esc(info.releaseDate)));
     const metascore = info && (info.metascore || info.rating);
-    if (metascore != null) stats.push(stat('Puntuación', esc(metascore)));
-    if (game && game.sizeOnDisk) stats.push(stat('Tamaño', `${(game.sizeOnDisk / 1073741824).toFixed(1)} GB`));
-    if (game && game.playtimeMs > 0) stats.push(stat('Jugado', formatPlaytime(game.playtimeMs)));
-    if (info && info.developers && info.developers.length) stats.push(stat('Desarrolladores', esc(info.developers.slice(0, 3).join(', '))));
-    if (info && info.publishers && info.publishers.length) stats.push(stat('Editores', esc(info.publishers.slice(0, 2).join(', '))));
+    if (metascore != null) stats.push(stat(T('meta.score'), esc(metascore)));
+    if (game && game.sizeOnDisk) stats.push(stat(T('meta.size'), `${(game.sizeOnDisk / 1073741824).toFixed(1)} GB`));
+    if (game && game.playtimeMs > 0) stats.push(stat(T('meta.played'), formatPlaytime(game.playtimeMs)));
+    if (info && info.developers && info.developers.length) stats.push(stat(T('meta.devs'), esc(info.developers.slice(0, 3).join(', '))));
+    if (info && info.publishers && info.publishers.length) stats.push(stat(T('meta.pubs'), esc(info.publishers.slice(0, 2).join(', '))));
 
     let genresHtml = '';
     if (info && info.genres && info.genres.length) {
@@ -903,12 +918,12 @@
 
   function formatPlaytime(ms) {
     const totalMin = Math.round((ms || 0) / 60000);
-    if (totalMin < 1) return 'Menos de 1 min';
+    if (totalMin < 1) return T('playtime.lessThanMin');
     const h = Math.floor(totalMin / 60);
     const m = totalMin % 60;
-    if (h === 0) return `${m} min`;
-    if (m === 0) return `${h} h`;
-    return `${h} h ${m} min`;
+    if (h === 0) return T('playtime.min', { m });
+    if (m === 0) return T('playtime.hour', { h });
+    return T('playtime.hours', { h, m });
   }
 
   /* ═══════════════ LAUNCH ═══════════════ */
@@ -942,14 +957,14 @@
     try {
       const result = await api.launchGame(id);
       if (result && result.success) {
-        toast(`Lanzando ${game.name}...`);
+        toast(T('launch.launching', { name: game.name }));
       } else {
-        toast(`No se pudo lanzar ${game.name}`, 'error');
+        toast(T('launch.failed', { name: game.name }), 'error');
         console.warn('Launch failed:', result && result.error);
       }
     } catch (err) {
       console.error('Launch error:', err);
-      toast('Error al lanzar el juego', 'error');
+      toast(T('launch.error'), 'error');
     } finally {
       setTimeout(() => playBtn.classList.remove('loading'), 420);
       setTimeout(hideLaunchOverlay, 700);
@@ -1046,9 +1061,9 @@
   function renderHome() {
     const game = homeFeatured();
     if (!game) {
-      $('#home-title').textContent = 'Tu biblioteca está vacía';
-      $('#home-desc').textContent = 'Añade carpetas de juegos para empezar.';
-      $('#home-play').textContent = 'Abrir biblioteca';
+      $('#home-title').textContent = T('home.emptyTitle');
+      $('#home-desc').textContent = T('home.emptyDesc');
+      $('#home-play').textContent = T('home.openLibrary');
       $('#home-bg').style.backgroundImage = '';
       $('#home-cover-img').src = 'default-cover.svg';
       renderHomeRecents();
@@ -1080,7 +1095,7 @@
 
     $('#home-title').textContent = game.name;
     $('#home-play').innerHTML =
-      `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg> Continuar`;
+      `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg> ${esc(T('home.continue'))}`;
     $('#home-desc').textContent = '';
     const cached = state.detailCache.get(game.id);
     if (cached && cached.shortDescription) {
@@ -1104,7 +1119,7 @@
     const recents = recentGames();
     wrap.innerHTML = '';
     if (recents.length === 0) {
-      wrap.innerHTML = '<div class="home-recent-item" style="cursor:default"><span style="font-size:12px;color:var(--muted)">Aún no has jugado nada</span></div>';
+      wrap.innerHTML = `<div class="home-recent-item" style="cursor:default"><span style="font-size:12px;color:var(--muted)">${esc(T('home.noRecent'))}</span></div>`;
       return;
     }
     recents.forEach((g, i) => {
@@ -1255,7 +1270,7 @@
         label = g.platform || 'Retro';
       } else {
         key = 'p:' + platformKeyOf(g);
-        label = PLATFORM_LABELS[platformKeyOf(g)] || key;
+        label = T('platform.' + platformKeyOf(g)) || key;
       }
       const e = map.get(key) || { key, filter: key.slice(2), label, count: 0, playtimeMs: 0, lastPlayed: 0 };
       if (!map.has(key)) map.set(key, e);
@@ -1296,7 +1311,7 @@
 
     const grid = $('#consoles-grid');
     if (groups.length === 0) {
-      grid.innerHTML = `<div class="consoles-empty">Añade carpetas de juegos o ROMs para que aparezcan tus consolas aquí.</div>`;
+      grid.innerHTML = `<div class="consoles-empty">${esc(T('consoles.empty'))}</div>`;
       return;
     }
     grid.innerHTML = groups.map((g) => {
@@ -1304,8 +1319,8 @@
       return `<button class="console-tile" data-filter="${esc(g.filter)}" role="button">
         <span class="console-monogram" style="--tile-h:${hue}">${esc(monogramOf(g.label))}</span>
         <span class="console-name">${esc(g.label)}</span>
-        <span class="console-count">${g.count} ${g.count === 1 ? 'juego' : 'juegos'}</span>
-        <span class="console-playtime">${g.playtimeMs > 0 ? formatPlaytime(g.playtimeMs) : 'sin jugar'}</span>
+        <span class="console-count">${esc(T('consoles.games', { n: g.count }))}</span>
+        <span class="console-playtime">${g.playtimeMs > 0 ? formatPlaytime(g.playtimeMs) : esc(T('consoles.unplayed'))}</span>
       </button>`;
     }).join('');
 
@@ -1391,12 +1406,12 @@
     const game = state.allGames.find((g) => g.id === state.selectedId);
     if (!game) return;
     if (game.launchUri && !game.exePath && !game.romPath) {
-      toast('No se puede capturar un juego de launcher externo', 'error');
+      toast(T('capture.notExternal'), 'error');
       return;
     }
     Sound.launch();
     const label = originalCaptureLabel;
-    if (label) label.textContent = 'Capturando en 8 s...';
+    if (label) label.textContent = T('capture.counting');
     captureBtn.disabled = true;
     try {
       const result = await api.captureGameplay(game.id);
@@ -1405,16 +1420,16 @@
         game.localCoverPath = result.localCoverPath;
         applyVisible();
         if (state.selectedId === game.id) renderDetailPanel(game);
-        toast('Captura guardada. ¡Se usará como portada!', 'success');
+        toast(T('capture.saved'), 'success');
       } else {
-        toast(result && result.error ? result.error : 'No se pudo capturar la imagen', 'error');
+        toast(result && result.error ? result.error : T('capture.failed'), 'error');
       }
     } catch (err) {
       console.error('Capture gameplay failed:', err);
-      toast('Error al capturar el gameplay', 'error');
+      toast(T('capture.error'), 'error');
     } finally {
       captureBtn.disabled = false;
-      if (label) label.textContent = 'Capturar gameplay';
+      if (label) label.textContent = T('capture.label');
     }
   });
 
@@ -1606,17 +1621,17 @@
       $('#gamepad-dot').classList.add('on');
       const pads = navigator.getGamepads && navigator.getGamepads();
       const pad = pads && pads[GAMEPAD.index] ? pads[GAMEPAD.index] : null;
-      const id = pad ? pad.id : 'Mando conectado';
+      const id = pad ? pad.id : T('gamepad.connected');
       $('#gamepad-text').textContent = shortGamepadName(id);
     } else {
       $('#gamepad-dot').classList.remove('on');
-      $('#gamepad-text').textContent = 'Sin mando';
+      $('#gamepad-text').textContent = T('gamepad.none');
     }
   }
 
   function shortGamepadName(id) {
     const clean = id.replace(/\(.*?\)/g, '').trim();
-    if (!clean) return 'Mando conectado';
+    if (!clean) return T('gamepad.connected');
     return clean.length > 24 ? clean.substring(0, 24) + '…' : clean;
   }
 
@@ -1855,7 +1870,7 @@
         case 'open-folder':
           if (game.installDir) {
             const ok = await api.openFolder(game.installDir);
-            if (!ok) toast('No se pudo abrir la ubicación', 'error');
+            if (!ok) toast(T('ctx.openFolderFail'), 'error');
           } else if (game.exePath) {
             api.openFolder(game.exePath.replace(/\\[^\\]*$/, ''));
           }
@@ -1863,7 +1878,7 @@
         case 'remove':
           await api.removeGame(game.id);
           removeGameFromState(game.id);
-          toast(`${game.name} eliminado de la biblioteca`);
+          toast(T('ctx.removed', { name: game.name }));
           break;
         case 'delete-disk':
           await deleteGameFromDisk(game);
@@ -1879,13 +1894,13 @@
     const details = [];
     const platform = game.platform || game.source;
     if (platform) details.push(`${platformLabelOf(game)}`);
-    if (game.installDir) details.push(`Ubicación: ${game.installDir}`);
-    if (game.sizeOnDisk) details.push(`Tamaño: ${(game.sizeOnDisk / 1073741824).toFixed(1)} GB`);
-    if (game.playtimeMs > 0) details.push(`Jugado: ${formatPlaytime(game.playtimeMs)}`);
-    if (!game.exePath && !game.launchUri && !game.romPath) details.push('Ejecutable no encontrado');
+    if (game.installDir) details.push(T('tooltip.location', { path: game.installDir }));
+    if (game.sizeOnDisk) details.push(T('tooltip.size', { size: (game.sizeOnDisk / 1073741824).toFixed(1) }));
+    if (game.playtimeMs > 0) details.push(T('tooltip.played', { time: formatPlaytime(game.playtimeMs) }));
+    if (!game.exePath && !game.launchUri && !game.romPath && !game.aumid) details.push(T('tooltip.noExe'));
     if (game.lastPlayed) {
       const d = new Date(game.lastPlayed);
-      details.push(`Último lanzamiento: ${d.toLocaleDateString('es-ES')}`);
+      details.push(T('tooltip.lastPlayed', { date: d.toLocaleDateString(localeTag()) }));
     }
     $('#tooltip-details').innerHTML = details.join('<br>') || '—';
 
@@ -1914,8 +1929,9 @@
   async function loadFolders() {
     try {
       const folders = await api.getCustomFolders();
-      renderFoldersList(folders, $('#folders-list'));
-      renderFoldersList(folders, $('#settings-folders'));
+      state.customFolders = folders || [];
+      renderFoldersList(state.customFolders, $('#folders-list'));
+      renderFoldersList(state.customFolders, $('#settings-folders'));
     } catch (err) {
       console.error('Failed to load folders:', err);
     }
@@ -1927,7 +1943,7 @@
     if (!folders || folders.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'folder-item';
-      empty.innerHTML = `<span class="folder-path">Sin carpetas</span>`;
+      empty.innerHTML = `<span class="folder-path">${esc(T('folders.none'))}</span>`;
       empty.style.color = 'var(--muted)';
       empty.style.opacity = '0.7';
       container.appendChild(empty);
@@ -1940,7 +1956,7 @@
       const short = folder.split(/[\\/]/).filter(Boolean).pop() || folder;
       item.innerHTML = `
         <span class="folder-path" title="${esc(folder)}">${esc(short)}</span>
-        <button class="folder-remove" data-path="${esc(folder)}" title="Quitar carpeta">
+        <button class="folder-remove" data-path="${esc(folder)}" title="${esc(T('folders.removeTitle'))}">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       `;
@@ -1948,7 +1964,7 @@
         e.stopPropagation();
         await api.removeCustomFolder(folder);
         loadFolders();
-        toast('Carpeta eliminada');
+        toast(T('folders.removed'));
       });
       container.appendChild(item);
     });
@@ -1960,11 +1976,11 @@
       if (folder) {
         await api.addCustomFolder(folder);
         loadFolders();
-        toast(`Carpeta añadida: ${folder}`);
+        toast(T('folders.added', { folder }));
       }
     } catch (err) {
       console.error('Failed to add folder:', err);
-      toast('No se pudo añadir la carpeta', 'error');
+      toast(T('folders.addFailed'), 'error');
     }
   }
 
@@ -2011,7 +2027,7 @@
     if (!emulators || emulators.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'emu-empty';
-      empty.textContent = 'Sin emuladores configurados';
+      empty.textContent = T('emu.none');
       wrap.appendChild(empty);
       return;
     }
@@ -2019,7 +2035,7 @@
     emulators.forEach((emu) => {
       const item = document.createElement('div');
       item.className = 'emu-item';
-      const bundledBadge = emu.bundled ? '<span class="emu-bundled">Incluido</span> ' : '';
+      const bundledBadge = emu.bundled ? `<span class="emu-bundled">${esc(T('emu.bundled'))}</span> ` : '';
       const retroCount = state.allGames
         ? state.allGames.filter(
             (g) => g.source === 'retro' && (g.platform || '') === (emu.console || '')
@@ -2027,12 +2043,12 @@
         : 0;
       const statusText =
         retroCount === 0
-          ? 'Sin ROMs todavía'
+          ? T('emu.noRoms')
           : retroCount === 1
-            ? '1 juego encontrado'
-            : retroCount + ' juegos encontrados';
+            ? T('emu.oneGame')
+            : T('emu.nGames', { n: retroCount });
       const openBtn = emu.romsPath
-        ? `<button class="emu-open" data-path="${esc(emu.romsPath)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Abrir ROMs</button>`
+        ? `<button class="emu-open" data-path="${esc(emu.romsPath)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> ${esc(T('emu.openRoms'))}</button>`
         : '';
       item.innerHTML = `
         <div class="emu-item-info">
@@ -2041,7 +2057,7 @@
           <div class="emu-item-paths">${esc(emu.exePath)}${emu.romsPath ? '<br>' + esc(emu.romsPath) : ''}</div>
           <div class="emu-item-status"><span class="emu-status-text ${retroCount === 0 ? 'emu-status-empty' : ''}">${statusText}</span> ${openBtn}</div>
         </div>
-        <button class="emu-remove" data-id="${esc(emu.id)}" title="Quitar emulador">✕</button>
+        <button class="emu-remove" data-id="${esc(emu.id)}" title="${esc(T('emu.removeTitle'))}">✕</button>
       `;
       const openRoms = item.querySelector('.emu-open');
       if (openRoms) {
@@ -2054,10 +2070,10 @@
         try {
           await api.removeEmulator(emu.id);
           await loadEmulators();
-          toast('Emulador eliminado');
+          toast(T('emu.removed'));
         } catch (err) {
           console.error('Remove emulator failed:', err);
-          toast('No se pudo eliminar el emulador', 'error');
+          toast(T('emu.removeFailed'), 'error');
         }
       });
       wrap.appendChild(item);
@@ -2123,18 +2139,18 @@
     const romsPath = $('#emu-roms').value.trim();
     const args = $('#emu-args').value.trim();
 
-    if (!name) { toast('Escribe un nombre para el emulador', 'error'); return; }
-    if (!exePath) { toast('Selecciona el ejecutable del emulador', 'error'); return; }
-    if (!romsPath) { toast('Selecciona la carpeta de ROMs', 'error'); return; }
+    if (!name) { toast(T('emu.addNameError'), 'error'); return; }
+    if (!exePath) { toast(T('emu.addExeError'), 'error'); return; }
+    if (!romsPath) { toast(T('emu.addRomsError'), 'error'); return; }
 
     try {
       await api.addEmulator({ name, console: consoleValue || 'Retro', exePath, romsPath, args });
       clearEmulatorForm();
       await loadEmulators();
-      toast('Emulador añadido. Analizando ROMs...');
+      toast(T('emu.added'));
     } catch (err) {
       console.error('Add emulator failed:', err);
-      toast('No se pudo añadir el emulador', 'error');
+      toast(T('emu.addFailed'), 'error');
     }
   });
 
@@ -2156,17 +2172,17 @@
   $('#manual-add').addEventListener('click', async () => {
     const name = $('#manual-name').value.trim();
     const exePath = $('#manual-exe').value.trim();
-    if (!name) { toast('Escribe el nombre del juego', 'error'); return; }
-    if (!exePath) { toast('Selecciona el ejecutable del juego', 'error'); return; }
+    if (!name) { toast(T('manual.nameError'), 'error'); return; }
+    if (!exePath) { toast(T('manual.exeError'), 'error'); return; }
     try {
       const game = await api.addGame({ name, exePath, source: 'custom', platform: 'custom', isManual: true });
       $('#manual-name').value = '';
       $('#manual-exe').value = '';
-      toast(`Juego añadido: ${game.name}`, 'success');
+      toast(T('manual.added', { name: game.name }), 'success');
       await loadGames();
     } catch (err) {
       console.error('Add game failed:', err);
-      toast('No se pudo añadir el juego', 'error');
+      toast(T('manual.addFailed'), 'error');
     }
   });
 
@@ -2203,6 +2219,53 @@
     }
   });
 
+  /* ── Idioma ── */
+  function renderLocaleOptions() {
+    const sel = $('#set-locale');
+    if (!sel) return;
+    sel.innerHTML = '';
+    Object.keys(I18N.LOCALES).forEach((code) => {
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = (I18N.DICT[code] && I18N.DICT[code]['locale.self']) || code;
+      sel.appendChild(opt);
+    });
+    sel.value = state.locale;
+  }
+
+  const localeSelect = $('#set-locale');
+  if (localeSelect) {
+    localeSelect.addEventListener('change', (e) => {
+      state.locale = e.target.value;
+      saveSettings({ locale: state.locale });
+      applyLocale();
+    });
+  }
+
+  function localeTag() {
+    return state.locale === 'en' ? 'en-US' : 'es-ES';
+  }
+
+  function applyLocale() {
+    applyI18n();
+    renderLocaleOptions();
+    updateCounts();
+    applyVisible();
+    if (state.consolesOpen) renderConsoles();
+    if (homeOpen) renderHome();
+    renderGamepadUI();
+    renderFoldersList(state.customFolders, $('#folders-list'));
+    renderFoldersList(state.customFolders, $('#settings-folders'));
+    renderEmulatorsList(state.emulators || []);
+    if (gamePageOpen() && state.selectedId) {
+      const game = state.allGames.find((g) => g.id === state.selectedId);
+      if (game) renderDetailPanel(game);
+    }
+    if (state.coverGame && $('#cover-modal') && !$('#cover-modal').classList.contains('hidden')) {
+      $('#cover-modal-title').textContent = T('cover.titlePrefix', { name: state.coverGame.name });
+    }
+  }
+
   /* requisitos del sistema (VC++ Redistributable) */
   function showEnvWarning(show) {
     const group = $('#env-warn-group');
@@ -2233,11 +2296,11 @@
   $('#export-config-btn').addEventListener('click', async () => {
     try {
       const r = await api.exportConfig();
-      if (r && r.ok) toast('Configuración exportada', 'success');
-      else if (r && !r.canceled) toast('No se pudo exportar la configuración', 'error');
+      if (r && r.ok) toast(T('config.exported'), 'success');
+      else if (r && !r.canceled) toast(T('config.exportFailed'), 'error');
     } catch (err) {
       console.error('Export config failed:', err);
-      toast('No se pudo exportar la configuración', 'error');
+      toast(T('config.exportFailed'), 'error');
     }
   });
 
@@ -2245,21 +2308,21 @@
     try {
       const r = await api.importConfig();
       if (r && r.ok) {
-        toast('Configuración importada', 'success');
+        toast(T('config.imported'), 'success');
         await loadSettings();
         await loadFolders();
         loadEmulators();
         api.rescan();
       } else if (r && r.error === 'invalid-json') {
-        toast('El archivo no es un JSON válido', 'error');
+        toast(T('config.invalidJson'), 'error');
       } else if (r && r.error === 'not-gamevault') {
-        toast('El archivo no es una configuración de GameVault', 'error');
+        toast(T('config.notGamevault'), 'error');
       } else if (r && !r.canceled) {
-        toast('No se pudo importar la configuración', 'error');
+        toast(T('config.importFailed'), 'error');
       }
     } catch (err) {
       console.error('Import config failed:', err);
-      toast('No se pudo importar la configuración', 'error');
+      toast(T('config.importFailed'), 'error');
     }
   });
 
@@ -2313,23 +2376,23 @@
     if (!btn) return;
     btn.disabled = true;
     btn.textContent = '...';
-    setUpdateStatus('Comprobando la última versión en GitHub…', 'busy');
+    setUpdateStatus(T('updates.checking'), 'busy');
     try {
       const res = await api.checkUpdates();
       if (!res) {
-        setUpdateStatus('No se pudo comprobar. Reintenta más tarde.', 'err');
+        setUpdateStatus(T('updates.checkFailed'), 'err');
       } else if (res.error) {
         setUpdateStatus(res.error, 'err');
       } else if (!res.hasUpdate) {
         setUpdateStatus(
-          `Ya tienes la última versión (${res.currentVersion || 'actual'}).`,
+          T('updates.upToDate', { version: res.currentVersion || 'actual' }),
           'ok'
         );
       } else {
         const note = (res.notes || '').split('\n').slice(0, 6).join('\n  ');
-        const kind = note ? ' (notas de la versión abajo)' : '';
+        const kind = note ? T('updates.notesSuffix') : '';
         setUpdateStatus(
-          `¡Nueva versión ${res.latestVersion} disponible!${kind}`,
+          T('updates.newAvailable', { version: res.latestVersion, suffix: kind }),
           'ok'
         );
         const resultBox = $('#update-result');
@@ -2346,14 +2409,14 @@
           if (res.assetUrl) {
             const dl = document.createElement('button');
             dl.className = 'btn-primary';
-            dl.textContent = 'Descargar instalador';
+            dl.textContent = T('updates.downloadInstaller');
             dl.onclick = () => api.openUpdateUrl(res.assetUrl);
             row.appendChild(dl);
           }
           if (res.htmlUrl) {
             const go = document.createElement('button');
             go.className = 'btn-secondary';
-            go.textContent = 'Ver release';
+            go.textContent = T('updates.viewRelease');
             go.onclick = () => api.openUpdateUrl(res.htmlUrl);
             row.appendChild(go);
           }
@@ -2362,10 +2425,10 @@
       }
     } catch (err) {
       console.error('Update check failed:', err);
-      setUpdateStatus('Error al comprobar actualizaciones.', 'err');
+      setUpdateStatus(T('updates.checkError'), 'err');
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Buscar';
+      btn.textContent = T('settings.checkNow');
     }
   }
 
@@ -2396,10 +2459,10 @@
 
     restartBtn.addEventListener('click', () => {
       restartBtn.disabled = true;
-      restartBtn.textContent = 'Actualizando…';
+      restartBtn.textContent = T('banner.updating');
       api.installUpdate().catch(() => {
         restartBtn.disabled = false;
-        restartBtn.textContent = 'Reiniciar y actualizar';
+        restartBtn.textContent = T('banner.restart');
       });
     });
 
@@ -2407,7 +2470,7 @@
       if (!st) return;
       if (st.type === 'not-available') return;
       if (st.type === 'error') {
-        text.textContent = st.error || 'Error al comprobar la actualización.';
+        text.textContent = st.error || T('banner.error');
         icon.textContent = '!';
         restartBtn.classList.add('hidden');
         show('err');
@@ -2415,20 +2478,20 @@
       }
       if (st.type === 'available') {
         icon.textContent = '↓';
-        text.textContent = `Nueva versión ${st.version || ''} disponible. Descargando…`;
+        text.textContent = T('banner.newVersion', { version: st.version || '' });
         restartBtn.classList.add('hidden');
         show('');
         return;
       }
       if (st.type === 'downloading') {
         icon.textContent = `${st.percent || 0}%`;
-        text.textContent = `Descargando actualización… ${st.percent || 0}%`;
+        text.textContent = T('banner.downloading', { percent: st.percent || 0 });
         show('');
         return;
       }
       if (st.type === 'downloaded') {
         icon.textContent = '✓';
-        text.textContent = `Actualización ${st.version || ''} lista. Reinicia para aplicar los cambios.`;
+        text.textContent = T('banner.ready', { version: st.version || '' });
         restartBtn.classList.remove('hidden');
         show('done');
       }
@@ -2441,6 +2504,8 @@
     try {
       const settings = await api.getSettings();
       if (!settings) return;
+      state.locale = settings.locale || state.locale;
+      renderLocaleOptions();
       setColumns(settings.columns || 5);
       $('#set-auto-scan').checked = settings.autoScan !== false;
       const soundOn = settings.sound !== false;
@@ -2465,9 +2530,9 @@
 
   function openCoverModal(game) {
     state.coverGame = game;
-    $('#cover-modal-title').textContent = `Portada · ${game.name}`;
+    $('#cover-modal-title').textContent = T('cover.titlePrefix', { name: game.name });
     $('#cover-search-input').value = game.name;
-    $('#cover-results').innerHTML = `<div class="cover-hint">Escribe un nombre y pulsa Buscar</div>`;
+    $('#cover-results').innerHTML = `<div class="cover-hint">${esc(T('cover.searchHint'))}</div>`;
     coverModal.classList.remove('hidden');
     setTimeout(() => {
       $('#cover-search-input').focus();
@@ -2486,11 +2551,11 @@
   async function doCoverSearch(query) {
     const resultsEl = $('#cover-results');
     if (!query || !query.trim()) {
-      resultsEl.innerHTML = `<div class="cover-hint">Escribe un nombre y pulsa Buscar</div>`;
+      resultsEl.innerHTML = `<div class="cover-hint">${esc(T('cover.searchHint'))}</div>`;
       return;
     }
 
-    resultsEl.innerHTML = `<div class="cover-loading"><div class="spinner"></div>Buscando portadas...</div>`;
+    resultsEl.innerHTML = `<div class="cover-loading"><div class="spinner"></div>` + esc(T('cover.searching')) + `</div>`;
 
     try {
       const items = await api.searchArtwork(query.trim());
@@ -2504,13 +2569,13 @@
         note.className = 'cover-rawg-note';
         note.innerHTML =
           `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>` +
-          `<span><b>Sin clave RAWG.</b> Añade tu clave en <b>Ajustes → Claves de API</b> para ver descripciones y arte de todas las plataformas (Epic/GOG/custom). Por ahora se muestran resultados de Steam/SteamGridDB.</span>`;
+          T('cover.rawgNote');
         resultsEl.appendChild(note);
       }
       if (!items || items.length === 0) {
         const hint = document.createElement('div');
         hint.className = 'cover-hint';
-        hint.textContent = 'No se encontraron resultados. Intenta con otro nombre.';
+        hint.textContent = T('cover.noResults');
         resultsEl.appendChild(hint);
         return;
       }
@@ -2522,12 +2587,12 @@
         const img = document.createElement('img');
         img.loading = 'lazy';
         img.src = item.url || item.thumb || '';
-        img.alt = 'Portada';
+        img.alt = T('cover.title');
         img.onerror = () => div.remove();
         if (item.isWide) {
           const badge = document.createElement('span');
           badge.className = 'cover-item-wide-badge';
-          badge.textContent = 'Panorámica';
+          badge.textContent = T('cover.wide');
           div.appendChild(badge);
         }
         img.onclick = async () => {
@@ -2542,14 +2607,14 @@
                 delete game.localCoverDataUrl;
                 applyVisible();
                 if (state.selectedId === game.id && gamePageOpen()) renderDetailPanel(game);
-                toast('Portada actualizada', 'success');
+                toast(T('cover.updated'), 'success');
               } else {
-                toast('No se pudo guardar la portada', 'error');
+                toast(T('cover.saveFailed'), 'error');
               }
               closeCoverModal();
             } catch (err) {
               console.error('Cover set failed:', err);
-              toast('Error al guardar la portada', 'error');
+              toast(T('cover.saveError'), 'error');
             }
           }
         };
@@ -2564,7 +2629,7 @@
       });
     } catch (err) {
       console.error('Cover search failed:', err);
-      resultsEl.innerHTML = `<div class="cover-hint">La búsqueda falló. Intenta de nuevo.</div>`;
+      resultsEl.innerHTML = `<div class="cover-hint">${esc(T('cover.searchFailed'))}</div>`;
     }
   }
 
@@ -2593,13 +2658,13 @@
             delete game.localCoverDataUrl;
             applyVisible();
             if (state.selectedId === game.id && gamePageOpen()) renderDetailPanel(game);
-            toast('Portada actualizada', 'success');
+            toast(T('cover.updated'), 'success');
           } else {
-            toast('No se pudo guardar la portada', 'error');
+            toast(T('cover.saveFailed'), 'error');
           }
         } catch (err) {
           console.error('Upload cover failed:', err);
-          toast('Error al guardar la portada', 'error');
+          toast(T('cover.saveError'), 'error');
         }
       };
       reader.readAsDataURL(file);
@@ -2649,6 +2714,7 @@
   async function init() {
     initGamepad();
     await loadSettings();
+    applyLocale();
     await loadFolders();
     loadEmulators();
     loadGames();

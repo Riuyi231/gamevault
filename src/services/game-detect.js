@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const crypto = require('crypto');
+const I18N = require('../i18n/dict');
 
 const SKIP_APPIDS = new Set([
   '228980', // Steamworks Common Redistributables
@@ -197,6 +198,16 @@ class GameDetector {
       'HKLM\\SOFTWARE\\WOW6432Node\\GOG.com\\Games',
       'HKLM\\SOFTWARE\\GOG.com\\Games'
     ];
+    this.gogPhids = new Map();
+    this.setLocale();
+  }
+
+  setLocale(locale) {
+    this.locale = I18N.LOCALES[locale] ? locale : I18N.DEFAULT_LOCALE;
+  }
+
+  t(key, vars) {
+    return I18N.t(this.locale, key, vars);
   }
 
   /* ═══════════════ HELPERS ═══════════════ */
@@ -470,7 +481,7 @@ class GameDetector {
     for (let li = 0; li < libs.length; li++) {
       const lib = libs[li];
       if (onProgress) {
-        onProgress(Math.round(8 + (li / Math.max(1, libs.length)) * 24), 'Detectando juegos de Steam...');
+        onProgress(Math.round(8 + (li / Math.max(1, libs.length)) * 24), this.t('detect.steam'));
       }
 
       const steamApps = path.join(lib, 'steamapps');
@@ -538,7 +549,7 @@ class GameDetector {
     for (let li = 0; li < libs.length; li++) {
       const lib = libs[li];
       if (onProgress) {
-        onProgress(Math.round(34 + (li / Math.max(1, libs.length)) * 18), 'Analizando carpetas de Steam...');
+        onProgress(Math.round(34 + (li / Math.max(1, libs.length)) * 18), this.t('detect.steamFolders'));
       }
 
       const commonDir = path.join(lib, 'steamapps', 'common');
@@ -649,7 +660,7 @@ class GameDetector {
           seen.add(id);
 
           if (!shown && onProgress) {
-            onProgress(54, 'Detectando juegos de Epic Games...');
+            onProgress(54, this.t('detect.epic'));
             shown = true;
           }
 
@@ -719,6 +730,27 @@ class GameDetector {
 
   /* ═══════════════ GOG ═══════════════ */
 
+  // Reads productId from the first `goggame-<productId>.info` JSON inside an
+  // install dir so we can build a real `galaxy://launchgame/<id>` URI.
+  _gogPhid(installDir) {
+    if (!installDir || !isDir(installDir)) return '';
+    try {
+      const entries = fs.readdirSync(installDir);
+      for (const entry of entries) {
+        const m = /^goggame-(\d+)\.info$/i.exec(entry);
+        if (!m) continue;
+        const raw = fs.readFileSync(path.join(installDir, entry), 'utf-8');
+        const data = JSON.parse(raw);
+        const pid = data && (data.productId || data.gameId);
+        if (pid) return String(pid);
+        return m[1];
+      }
+    } catch {
+      // ignore unreadable info files
+    }
+    return '';
+  }
+
   async scanGOG(onProgress) {
     const games = [];
     const seen = new Set();
@@ -786,6 +818,11 @@ class GameDetector {
           if (seen.has(id)) continue;
           seen.add(id);
 
+          if (block.path) {
+            const phid = this._gogPhid(block.path);
+            if (phid) this.gogPhids.set(id, phid);
+          }
+
           games.push({
             id,
             name: block.name,
@@ -796,7 +833,7 @@ class GameDetector {
             installDir: block.path || '',
             sizeOnDisk: 0,
             appId: block.id,
-            launchUri: '',
+            launchUri: `galaxy://launchgame/${block.id}`,
             addedAt: Date.now()
           });
         } catch {
@@ -805,7 +842,7 @@ class GameDetector {
       }
     }
 
-    if (onProgress) onProgress(70, 'Detectando juegos de GOG...');
+    if (onProgress) onProgress(70, this.t('detect.gog'));
 
     // Fallback folder scan
     const gogRoots = [];
@@ -829,9 +866,12 @@ class GameDetector {
         if (norm.length < 2 || SKIP_NAME_PATTERNS.some((r) => r.test(norm))) continue;
         const exePath = this._findMainExe(fullPath);
         if (!exePath) continue;
-        const id = `gogfolder-${this.generateId('gog', fullPath)}`;
+        const phid = this._gogPhid(fullPath);
+        const id = phid ? `gog-${phid}` : `gogfolder-${this.generateId('gog', fullPath)}`;
+        const gogId = phid || '';
         if (seen.has(id)) continue;
         seen.add(id);
+        if (phid) this.gogPhids.set(id, phid);
         games.push({
           id,
           name: this.cleanGameName(entry.name),
@@ -841,8 +881,8 @@ class GameDetector {
           coverUrl: '',
           installDir: fullPath,
           sizeOnDisk: 0,
-          appId: '',
-          launchUri: '',
+          appId: phid || '',
+          launchUri: phid ? `galaxy://launchgame/${phid}` : '',
           addedAt: Date.now()
         });
       }
@@ -981,7 +1021,7 @@ class GameDetector {
     });
 
     for (const drive of drives) {
-      if (onProgress) onProgress(62, `Analizando unidades de disco (${drive.replace(/[\\/]+$/, '')})...`);
+      if (onProgress) onProgress(62, this.t('detect.drives', { drive: drive.replace(/[\\/]+$/, '') }));
       let entries;
       try {
         entries = fs.readdirSync(drive, { withFileTypes: true });
@@ -1035,6 +1075,71 @@ class GameDetector {
     return games;
   }
 
+  /* ═══════════════ XBOX / GAME PASS (MSIX apps) ═══════════════ */
+
+  _xboxManifestInfo(appxDir) {
+    const manifestPath = path.join(appxDir, 'AppxManifest.xml');
+    if (!fs.existsSync(manifestPath)) return null;
+    try {
+      const xml = fs.readFileSync(manifestPath, 'utf-8');
+      const nameM = /<Identity[^>]*\bName\s*=\s*"([^"]+)"/i.exec(xml);
+      const appM = /<Application[^>]*\bId\s*=\s*"([^"]+)"/i.exec(xml);
+      const dispM = /<DisplayName[^>]*>([^<]*)<\/DisplayName>/i.exec(xml);
+      if (!nameM || !appM) return null;
+      let display = dispM && dispM[1] ? dispM[1].trim() : '';
+      display = String(display)
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+      if (!display || /^ms-resource:/i.test(display)) display = '';
+      return { aumid: `${nameM[1]}!${appM[1]}`, display };
+    } catch {
+      return null;
+    }
+  }
+
+  async scanXbox(onProgress) {
+    const games = [];
+    const seen = new Set();
+    for (const drive of this._drives()) {
+      const root = path.join(drive, 'XboxGames');
+      if (!isDir(root)) continue;
+      if (onProgress) onProgress(76, this.t('detect.xbox'));
+      let entries;
+      try {
+        entries = fs.readdirSync(root, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const appxDir = path.join(root, entry.name);
+        const info = this._xboxManifestInfo(appxDir);
+        if (!info) continue;
+        const id = `xbox-${this.generateId('xbox', info.aumid)}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        games.push({
+          id,
+          name: info.display ? this.cleanGameName(info.display) : this.cleanGameName(entry.name),
+          exePath: '',
+          platform: 'xbox',
+          source: 'xbox',
+          coverUrl: '',
+          installDir: appxDir,
+          sizeOnDisk: 0,
+          appId: info.aumid,
+          aumid: info.aumid,
+          launchUri: '',
+          addedAt: Date.now()
+        });
+      }
+    }
+    return games;
+  }
+
   /* ═══════════════ MERGE ═══════════════ */
 
   async getAllGames(customFolders = [], extraScanPaths = [], onProgress, emulators = []) {
@@ -1042,10 +1147,10 @@ class GameDetector {
       if (typeof onProgress === 'function') onProgress(Math.max(1, Math.min(100, pct)), msg);
     };
 
-    report(3, 'Detectando bibliotecas de Steam...');
+    report(3, this.t('detect.steam'));
     const steamManifest = await this.scanSteam((p, m) => report(p, m));
 
-    report(33, 'Analizando carpetas de Steam sin manifiesto...');
+    report(33, this.t('detect.steamFolders'));
     const covered = new Set();
     for (const g of steamManifest) {
       if (g.installDir) covered.add(normalizeDirName(g.installDir));
@@ -1054,23 +1159,26 @@ class GameDetector {
     }
     const steamCommon = await this.scanSteamCommonFolders(covered, (p, m) => report(p, m));
 
-    report(53, 'Detectando juegos de Epic Games...');
+    report(53, this.t('detect.epic'));
     const epicGames = await this.scanEpic(onProgress);
 
-    report(68, 'Detectando juegos de GOG...');
+    report(68, this.t('detect.gog'));
     const gogGames = await this.scanGOG(onProgress);
 
-    report(80, 'Analizando carpetas personalizadas...');
+    report(75, this.t('detect.xbox'));
+    const xboxGames = await this.scanXbox(onProgress);
+
+    report(80, this.t('detect.custom'));
     const customGames = await this.scanCustomFolders(customFolders, extraScanPaths);
 
-    report(86, 'Buscando juegos en unidades de disco...');
+    report(86, this.t('detect.drivesStart'));
     const driveGames = await this.scanDriveRoots((p, m) => report(p, m));
 
-    report(89, 'Analizando ROMs de emuladores...');
+    report(89, this.t('detect.roms'));
     const retroGames = this.scanEmulatorRoms(emulators);
 
-    report(93, 'Fusionando bibliotecas de juegos...');
-    const allGames = [...steamManifest, ...steamCommon, ...epicGames, ...gogGames, ...customGames, ...driveGames, ...retroGames];
+    report(93, this.t('detect.merge'));
+    const allGames = [...steamManifest, ...steamCommon, ...epicGames, ...gogGames, ...xboxGames, ...customGames, ...driveGames, ...retroGames];
 
     const groups = new Map();
     for (const game of allGames) {
@@ -1080,7 +1188,7 @@ class GameDetector {
       groups.get(key).push(game);
     }
 
-    const priority = { steam: 0, epic: 1, gog: 3, other: 5, custom: 6 };
+    const priority = { steam: 0, epic: 1, gog: 2, xbox: 3, other: 5, custom: 6 };
     const merged = [];
 
     for (const list of groups.values()) {
@@ -1101,13 +1209,14 @@ class GameDetector {
           installDir: base.installDir || g.installDir,
           sizeOnDisk: base.sizeOnDisk || g.sizeOnDisk,
           appId: base.appId || g.appId,
+          aumid: base.aumid || g.aumid,
           launchUri: base.launchUri || g.launchUri
         };
       }
       merged.push(base);
     }
 
-    report(100, 'Biblioteca lista');
+    report(100, this.t('detect.ready'));
     return merged.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   }
 }

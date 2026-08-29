@@ -10,6 +10,7 @@ const ArtworkService = require('./services/artwork');
 const GameInfoService = require('./services/game-info');
 const UpdaterService = require('./services/updater');
 const { EmulatorCatalog } = require('./services/emulator-catalog');
+const I18N = require('./i18n/dict');
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
@@ -32,6 +33,19 @@ let updateDownloadedFor = null;
 
 const log = (...args) => console.log('[GameVault]', ...args);
 const logError = (...args) => console.error('[GameVault]', ...args);
+
+/* ─────────────────────────── I18N ─────────────────────────── */
+function currentLocale() {
+  try {
+    const s = gameStore && gameStore.getSettings ? gameStore.getSettings() : null;
+    return (s && s.locale) || I18N.DEFAULT_LOCALE;
+  } catch {
+    return I18N.DEFAULT_LOCALE;
+  }
+}
+function t(key, vars) {
+  return I18N.t(currentLocale(), key, vars);
+}
 
 /* ─────────────────────────── PLAYTIME ─────────────────────────── */
 
@@ -81,12 +95,6 @@ function tickPlaySessions() {
 function openGameProcess(game) {
   const id = game.id;
 
-  let exePath = game.exePath;
-  if (!exePath && game.installDir) {
-    exePath = gameDetector._findMainExe(game.installDir);
-    if (exePath) gameStore.updateGame(id, { exePath });
-  }
-
   // Emulador + ROM (juegos retro)
   if (game.romPath) {
     const emuPath = game.exePath || '';
@@ -106,7 +114,27 @@ function openGameProcess(game) {
         return { success: false, error: err.message };
       }
     }
-    return { success: false, error: 'Emulador no encontrado' };
+    return { success: false, error: t('main.emuNotFound') };
+  }
+
+  // Xbox / Game Pass (MSIX) apps launch via their AUMID through Explorer.
+  if (game.aumid) {
+    try {
+      const child = spawn('explorer.exe', ['shell:AppsFolder\\' + game.aumid], { windowsHide: true });
+      child.unref();
+      gameStore.updateGame(id, { lastPlayed: Date.now() });
+      startPlaySession(game, null, true);
+      log('Launched Xbox app:', game.name, game.aumid);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  let exePath = game.exePath;
+  if (!exePath && game.installDir) {
+    exePath = gameDetector._findMainExe(game.installDir);
+    if (exePath) gameStore.updateGame(id, { exePath });
   }
 
   if (exePath && fs.existsSync(exePath)) {
@@ -135,7 +163,7 @@ function openGameProcess(game) {
     }
   }
 
-  return { success: false, error: 'Ejecutable no encontrado' };
+  return { success: false, error: t('main.exeNotFound') };
 }
 
 // Captures the primary screen and stores it as a PNG for a game's real-gameplay cover.
@@ -148,15 +176,15 @@ async function captureScreenToFile(gameId) {
       types: ['screen'],
       thumbnailSize: { width: 1600, height: 900 }
     });
-    if (!sources || sources.length === 0) return { ok: false, error: 'No hay pantalla para capturar' };
+    if (!sources || sources.length === 0) return { ok: false, error: t('main.noScreen') };
     const primary = sources.find((s) => s.display_id === '0') || sources[0];
     const image = primary.thumbnail;
-    if (!image || image.isEmpty()) return { ok: false, error: 'No se pudo obtener la imagen' };
+    if (!image || image.isEmpty()) return { ok: false, error: t('main.noImage') };
     fs.writeFileSync(filePath, image.toPNG());
     return { ok: true, localCoverPath: filePath };
   } catch (err) {
     logError('Screen capture failed:', err);
-    return { ok: false, error: 'Falló la captura de pantalla' };
+    return { ok: false, error: t('main.captureFail') };
   }
 }
 
@@ -275,6 +303,9 @@ function syncServiceKeys(settings) {
   if (gameInfoService && gameInfoService.setRawgKey) gameInfoService.setRawgKey(s.rawgKey);
   if (artworkService && artworkService.setRawgKey) artworkService.setRawgKey(s.rawgKey);
   if (artworkService && artworkService.setSgdbKey) artworkService.setSgdbKey(s.sgdbKey);
+  if (gameDetector && gameDetector.setLocale) gameDetector.setLocale(s.locale || I18N.DEFAULT_LOCALE);
+  if (gameInfoService && gameInfoService.setLocale) gameInfoService.setLocale(s.locale || I18N.DEFAULT_LOCALE);
+  if (updaterService && updaterService.setLocale) updaterService.setLocale(s.locale || I18N.DEFAULT_LOCALE);
 }
 
 /* ─────────────────────────── SCANNING ─────────────────────────── */
@@ -401,20 +432,20 @@ function setupIPC() {
 
   ipcMain.handle('launch-game', async (event, id) => {
     const game = gameStore.getGame(id);
-    if (!game) return { success: false, error: 'Juego no encontrado' };
+    if (!game) return { success: false, error: t('main.gameNotFound') };
     return openGameProcess(game);
   });
 
   ipcMain.handle('capture-gameplay', async (event, id) => {
     const game = gameStore.getGame(id);
-    if (!game) return { ok: false, error: 'Juego no encontrado' };
+    if (!game) return { ok: false, error: t('main.gameNotFound') };
 
     const launched = openGameProcess(game);
     if (!launched || !launched.success) {
-      return { ok: false, error: launched && launched.error ? launched.error : 'No se pudo lanzar el juego' };
+      return { ok: false, error: launched && launched.error ? launched.error : t('main.launchFailed') };
     }
     if (launched.viaLauncher) {
-      return { ok: false, error: 'No se puede capturar un juego de launcher externo' };
+      return { ok: false, error: t('main.captureExternal') };
     }
 
     try {
@@ -438,7 +469,7 @@ function setupIPC() {
   ipcMain.handle('add-game', async (event, data) => {
     const game = {
       id: data.id || `custom-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      name: data.name || 'Juego',
+      name: data.name || t('main.defaultName'),
       exePath: data.exePath || '',
       source: data.source || 'custom',
       installDir: data.installDir || (data.exePath ? path.dirname(data.exePath) : ''),
@@ -470,13 +501,13 @@ function setupIPC() {
   // Delete a game's installed files from disk (moves to Recycle Bin for safety)
   ipcMain.handle('delete-game-from-disk', async (event, id) => {
     const game = gameStore.getGame(id);
-    if (!game) return { success: false, error: 'Juego no encontrado' };
+    if (!game) return { success: false, error: t('main.gameNotFound') };
 
     // Never delete the whole launcher/library roots (safety guard)
     const installDir = (game.installDir || '').trim();
     const protectedRoots = /^[A-Za-z]:[\\/](steam|steamlibrary|steamapps|program files|program files \(x86\)|epic games|gog|windows|users)/i;
     if (!installDir || !fs.existsSync(installDir) || protectedRoots.test(installDir.replace(/[\\/]+$/, ''))) {
-      return { success: false, error: 'Ubicación no válida para eliminar' };
+      return { success: false, error: t('main.invalidDeleteLocation') };
     }
 
     try {
@@ -487,7 +518,7 @@ function setupIPC() {
       try {
         fs.rmSync(installDir, { recursive: true, force: true });
       } catch (err2) {
-        return { success: false, error: err2.message || 'No se pudo eliminar' };
+        return { success: false, error: err2.message || t('main.deleteFailed') };
       }
     }
 
@@ -510,7 +541,7 @@ function setupIPC() {
   });
 
   ipcMain.handle('check-updates', async () => {
-    if (!updaterService) return { error: 'Actualizador no disponible.' };
+    if (!updaterService) return { error: t('main.updaterUnavailable') };
     return updaterService.checkForUpdates();
   });
 
@@ -520,22 +551,22 @@ function setupIPC() {
   });
 
   ipcMain.handle('download-update', async () => {
-    if (!app.isPackaged) return { error: 'Solo disponible en la versión instalada.' };
+    if (!app.isPackaged) return { error: t('main.packagedOnly') };
     try {
       autoUpdater.downloadUpdate();
       return { ok: true };
     } catch (err) {
-      return { error: err && err.message ? err.message : 'No se pudo iniciar la descarga.' };
+      return { error: err && err.message ? err.message : t('main.downloadStartFailed') };
     }
   });
 
   ipcMain.handle('install-update', async () => {
-    if (!app.isPackaged) return { error: 'Solo disponible en la versión instalada.' };
+    if (!app.isPackaged) return { error: t('main.packagedOnly') };
     try {
       autoUpdater.quitAndInstall(false, true);
       return { ok: true };
     } catch (err) {
-      return { error: err && err.message ? err.message : 'No se pudo instalar.' };
+      return { error: err && err.message ? err.message : t('main.installFailed') };
     }
   });
 
@@ -562,7 +593,7 @@ function setupIPC() {
 
   ipcMain.handle('export-config', async () => {
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-      title: 'Exportar configuración de GameVault',
+      title: t('main.exportTitle'),
       defaultPath: `gamevault-config-${new Date().toISOString().slice(0, 10)}.json`,
       filters: [{ name: 'JSON', extensions: ['json'] }]
     });
@@ -590,7 +621,7 @@ function setupIPC() {
 
   ipcMain.handle('import-config', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-      title: 'Importar configuración de GameVault',
+      title: t('main.importTitle'),
       filters: [{ name: 'JSON', extensions: ['json'] }],
       properties: ['openFile']
     });
@@ -656,7 +687,7 @@ function setupIPC() {
   ipcMain.handle('select-folder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory'],
-      title: 'Seleccionar carpeta de juegos'
+      title: t('main.selectFolderTitle')
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
@@ -665,8 +696,8 @@ function setupIPC() {
   ipcMain.handle('select-executable', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
-      title: 'Seleccionar ejecutable del emulador',
-      filters: [{ name: 'Ejecutables', extensions: ['exe'] }]
+      title: t('main.selectExeTitle'),
+      filters: [{ name: t('main.executablesFilter'), extensions: ['exe'] }]
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
@@ -717,7 +748,7 @@ function setupIPC() {
 
   ipcMain.handle('get-platforms', async () => {
     const counts = gameStore.getPlatformCounts();
-    const labels = { steam: 'Steam', epic: 'Epic', gog: 'GOG', other: 'Otros' };
+    const labels = { steam: t('filters.steam'), epic: t('filters.epic'), gog: t('filters.gog'), xbox: t('filters.xbox'), other: t('filters.other') };
     return Object.keys(counts).map((id) => ({ id, label: labels[id] || id, count: counts[id] }));
   });
 
@@ -795,8 +826,8 @@ function setupAutoUpdater() {
     rebuildTrayMenu();
     try {
       new Notification({
-        title: 'GameVault actualizado',
-        body: `La versión ${version || 'nueva'} está lista. Reinicia la app para instalarla.`
+        title: t('main.notifUpdatedTitle'),
+        body: t('main.notifUpdatedBody', { version: version || '' })
       }).show();
     } catch (err) {
       logError('Notification failed:', err);
@@ -849,7 +880,7 @@ async function checkUpdatesNow() {
     if (!info || !info.hasUpdate) {
       sendUpdateStatus({ type: 'not-available' });
       try {
-        new Notification({ title: 'GameVault al día', body: 'No hay actualizaciones disponibles.' }).show();
+        new Notification({ title: t('main.notifUpToDateTitle'), body: t('main.notifUpToDateBody') }).show();
       } catch { /* ignore */ }
       return;
     }
@@ -861,8 +892,8 @@ async function checkUpdatesNow() {
     } else {
       try {
         new Notification({
-          title: 'Nueva versión de GameVault',
-          body: `${info.latestVersion} disponible. Descárgala en la página de lanzamientos.`
+          title: t('main.notifNewTitle'),
+          body: t('main.notifNewBody', { version: info.latestVersion })
         }).show();
       } catch { /* ignore */ }
     }
@@ -876,18 +907,18 @@ function rebuildTrayMenu() {
   const hasUpdate = !!updateDownloadedFor;
   const menu = Menu.buildFromTemplate([
     {
-      label: 'Abrir / Cerrar GameVault',
+      label: t('main.trayToggle'),
       click: toggleMainWindow
     },
     { type: 'separator' },
     {
-      label: 'Buscar actualizaciones',
+      label: t('main.trayCheckUpdates'),
       click: () => checkUpdatesNow()
     },
     {
       label: updateDownloadedFor
-        ? `Reiniciar e instalar ${updateDownloadedFor}`
-        : 'Reiniciar e instalar actualización',
+        ? t('main.trayRestartInstallV', { version: updateDownloadedFor })
+        : t('main.trayRestartInstall'),
       enabled: hasUpdate,
       click: () => {
         if (app.isPackaged) {
@@ -898,7 +929,7 @@ function rebuildTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: 'Salir',
+      label: t('main.trayQuit'),
       click: () => {
         quitting = true;
         app.quit();

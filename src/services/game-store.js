@@ -7,7 +7,8 @@ const DEFAULT_SETTINGS = {
   accent: 'purple',
   theme: 'dark',
   rawgKey: '',
-  sgdbKey: ''
+  sgdbKey: '',
+  locale: 'es'
 };
 
 class GameStore {

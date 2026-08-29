@@ -42,13 +42,13 @@
       </circle>
     </svg>
     <div class="splash-title">GAME<span>VAULT</span></div>
-    <div class="splash-subtitle">Tu biblioteca de juegos</div>
+    <div class="splash-subtitle" data-i18n="splash.subtitle">Tu biblioteca de juegos</div>
     <div class="splash-bar">
       <div class="splash-bar-fill" id="splash-bar-fill"></div>
     </div>
     <div class="splash-progress-line">
       <span id="splash-percent">0%</span>
-      <span id="splash-status">Detectando juegos...</span>
+      <span id="splash-status" data-i18n="splash.detecting">Detectando juegos...</span>
     </div>
   </div>
 
@@ -75,13 +75,13 @@
         <span class="titlebar-sub">Multi-Platform Launcher</span>
       </div>
       <div class="titlebar-controls">
-        <button class="titlebar-btn" id="btn-minimize" title="Minimizar">
+        <button class="titlebar-btn" id="btn-minimize" title="Minimizar" data-i18n-title="titlebar.minimize">
           <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5.25" width="12" height="1.5" rx="0.75" fill="currentColor"/></svg>
         </button>
-        <button class="titlebar-btn" id="btn-maximize" title="Maximizar">
+        <button class="titlebar-btn" id="btn-maximize" title="Maximizar" data-i18n-title="titlebar.maximize">
           <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1.25" y="1.25" width="9.5" height="9.5" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
         </button>
-        <button class="titlebar-btn titlebar-btn-close" id="btn-close" title="Cerrar">
+        <button class="titlebar-btn titlebar-btn-close" id="btn-close" title="Cerrar" data-i18n-title="titlebar.close">
           <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         </button>
       </div>
@@ -92,54 +92,59 @@
       <!-- SIDEBAR -->
       <aside id="sidebar">
         <div class="sidebar-section">
-          <div class="sidebar-label">Biblioteca</div>
+          <div class="sidebar-label" data-i18n="sidebar.library">Biblioteca</div>
           <nav class="filters">
             <button class="filter-btn active" data-filter="all">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-              <span class="filter-label">Todas</span>
+              <span class="filter-label" data-i18n="filters.all">Todas</span>
               <span class="filter-count" id="count-all">0</span>
             </button>
             <button class="filter-btn" data-filter="steam">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18"/><path d="M12 8a4 4 0 0 1 0 8" stroke-linecap="round"/></svg>
-              <span class="filter-label">Steam</span>
+              <span class="filter-label" data-i18n="filters.steam">Steam</span>
               <span class="filter-count" id="count-steam">0</span>
             </button>
             <button class="filter-btn" data-filter="epic">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="12,2 22,22 2,22"/><circle cx="12" cy="16.5" r="2.5"/></svg>
-              <span class="filter-label">Epic</span>
+              <span class="filter-label" data-i18n="filters.epic">Epic</span>
               <span class="filter-count" id="count-epic">0</span>
             </button>
             <button class="filter-btn" data-filter="gog">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7" stroke-linecap="round"/></svg>
-              <span class="filter-label">GOG</span>
+              <span class="filter-label" data-i18n="filters.gog">GOG</span>
               <span class="filter-count" id="count-gog">0</span>
+            </button>
+            <button class="filter-btn" data-filter="xbox">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M4.2 7.5c3 5 3 4 7.8 9 4.8-5 4.8-4 7.8-9"/><path d="M4.2 16.5C7.2 11.5 7.2 12.5 12 8.5c4.8 4 4.8 3 7.8 8"/></svg>
+              <span class="filter-label" data-i18n="filters.xbox">Xbox</span>
+              <span class="filter-count" id="count-xbox">0</span>
             </button>
             <button class="filter-btn" data-filter="retro">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="3"/><circle cx="8" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
-              <span class="filter-label">Retro</span>
+              <span class="filter-label" data-i18n="filters.retro">Retro</span>
               <span class="filter-count" id="count-retro">0</span>
             </button>
             <button class="filter-btn" data-filter="other">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-              <span class="filter-label">Otros</span>
+              <span class="filter-label" data-i18n="filters.other">Otros</span>
               <span class="filter-count" id="count-other">0</span>
             </button>
           </nav>
         </div>
 
         <div class="sidebar-section">
-          <div class="sidebar-label">Consolas</div>
-          <button class="filter-btn" id="consoles-btn" title="Dashboard de consolas" data-filter="" aria-pressed="false">
+          <div class="sidebar-label" data-i18n="sidebar.consoles">Consolas</div>
+          <button class="filter-btn" id="consoles-btn" title="Dashboard de consolas" data-i18n-title="sidebar.consolesTitle" data-filter="" aria-pressed="false">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M1.5 12h3M19.5 12h3M12 1.5v3M12 19.5v3" stroke-linecap="round"/></svg>
-            <span class="filter-label">Consolas</span>
+            <span class="filter-label" data-i18n="sidebar.consoles">Consolas</span>
             <span class="filter-count" id="consoles-count">0</span>
           </button>
         </div>
 
         <div class="sidebar-section grow">
-          <div class="sidebar-label">Carpetas</div>
+          <div class="sidebar-label" data-i18n="sidebar.folders">Carpetas</div>
           <div class="folders-header">
-            <button class="add-folder-btn" id="add-folder-btn" title="Añadir carpeta de juegos">
+            <button class="add-folder-btn" id="add-folder-btn" title="Añadir carpeta de juegos" data-i18n-title="sidebar.addFolderTitle">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </button>
           </div>
@@ -153,12 +158,12 @@
               <circle cx="8" cy="12" r="1.5" fill="currentColor" stroke="none"/>
               <circle cx="16" cy="12" r="1.5" fill="currentColor" stroke="none"/>
             </svg>
-            <span id="gamepad-text">Sin mando</span>
+            <span id="gamepad-text" data-i18n="gamepad.none">Sin mando</span>
             <span class="gamepad-dot" id="gamepad-dot"></span>
           </div>
           <div class="game-count-row">
             <span id="game-count">0 juegos</span>
-            <button class="settings-gear" id="settings-gear" title="Configuración">
+            <button class="settings-gear" id="settings-gear" title="Configuración" data-i18n-title="settings.gearTitle">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -173,27 +178,27 @@
         <div class="topbar">
           <div class="search-container">
             <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="search-input" placeholder="Buscar juegos..." autocomplete="off" spellcheck="false">
+            <input type="text" id="search-input" placeholder="Buscar juegos..." data-i18n-placeholder="search.placeholder" autocomplete="off" spellcheck="false">
             <kbd class="search-kbd">Ctrl+F</kbd>
           </div>
-          <div class="filter-chip hidden" id="filter-chip" title="Filtro activo">
+          <div class="filter-chip hidden" id="filter-chip" title="Filtro activo" data-i18n-title="filter.active">
             <span class="filter-chip-label" id="filter-chip-label"></span>
-            <button class="filter-chip-clear" id="filter-chip-clear" title="Quitar filtro (Mostrar todas)" aria-label="Quitar filtro">×</button>
+            <button class="filter-chip-clear" id="filter-chip-clear" title="Quitar filtro (Mostrar todas)" data-i18n-title="filter.clearAll" aria-label="Quitar filtro" data-i18n-aria-label="filter.clear">×</button>
           </div>
           <div class="toolbar">
-            <select id="sort-select" title="Ordenar">
-              <option value="name">Nombre</option>
-              <option value="platform">Plataforma</option>
-              <option value="recent">Recientes</option>
-              <option value="mostplayed">Más jugado</option>
-              <option value="added">Añadidos</option>
+            <select id="sort-select" title="Ordenar" data-i18n-title="sort.title">
+              <option value="name" data-i18n="sort.name">Nombre</option>
+              <option value="platform" data-i18n="sort.platform">Plataforma</option>
+              <option value="recent" data-i18n="sort.recent">Recientes</option>
+              <option value="mostplayed" data-i18n="sort.mostPlayed">Más jugado</option>
+              <option value="added" data-i18n="sort.added">Añadidos</option>
             </select>
-            <div class="columns-ctrl" title="Columnas">
-              <button class="col-btn" id="col-minus" title="Menos columnas">−</button>
+            <div class="columns-ctrl" title="Columnas" data-i18n-title="columns.title">
+              <button class="col-btn" id="col-minus" title="Menos columnas" data-i18n-title="columns.less">−</button>
               <span id="col-value">5</span>
-              <button class="col-btn" id="col-plus" title="Más columnas">+</button>
+              <button class="col-btn" id="col-plus" title="Más columnas" data-i18n-title="columns.more">+</button>
             </div>
-            <button class="tool-btn" id="refresh-btn" title="Analizar juegos de nuevo">
+            <button class="tool-btn" id="refresh-btn" title="Analizar juegos de nuevo" data-i18n-title="refresh.title">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             </button>
           </div>
@@ -215,7 +220,7 @@
                 <img id="hero-cover" alt="" draggable="false">
               </div>
               <div class="hero-info">
-                <span class="hero-eyebrow">Destacado</span>
+                <span class="hero-eyebrow" data-i18n="hero.featured">Destacado</span>
                 <h2 class="hero-title" id="hero-title"></h2>
                 <div class="hero-badges">
                   <span class="detail-platform" id="hero-platform"></span>
@@ -224,7 +229,7 @@
                 <p class="hero-desc" id="hero-desc"></p>
                 <button class="btn-play hero-play" id="hero-play">
                   <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
-                  <span class="btn-play-label">Jugar</span>
+                  <span class="btn-play-label" data-i18n="btn.play">Jugar</span>
                 </button>
               </div>
             </div>
@@ -236,9 +241,9 @@
               <circle cx="8" cy="12" r="2" fill="#3d4353" stroke="none"/>
               <circle cx="16" cy="12" r="2" fill="#3d4353" stroke="none"/>
             </svg>
-            <h2>No hay juegos</h2>
-            <p>Añade carpetas personalizadas o pulsa Analizar para detectar tu biblioteca</p>
-            <button class="btn-primary" id="empty-add-folder">Añadir carpeta</button>
+            <h2 data-i18n="empty.title">No hay juegos</h2>
+            <p data-i18n="empty.desc">Añade carpetas personalizadas o pulsa Analizar para detectar tu biblioteca</p>
+            <button class="btn-primary" id="empty-add-folder" data-i18n="empty.addFolder">Añadir carpeta</button>
           </div>
         </div>
       </main>
@@ -250,10 +255,10 @@
         <div class="gp-topbar">
           <button class="gp-back" id="gp-back">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            <span>Biblioteca</span>
+            <span data-i18n="gp.back">Biblioteca</span>
           </button>
-          <span class="gp-topbar-label">Ficha del juego</span>
-          <button class="gp-close" id="gp-close" title="Cerrar (Esc)">
+          <span class="gp-topbar-label" data-i18n="gp.ficha">Ficha del juego</span>
+          <button class="gp-close" id="gp-close" title="Cerrar (Esc)" data-i18n-title="gp.close">
             <svg width="14" height="14" viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           </button>
         </div>
@@ -263,10 +268,10 @@
             <div class="gp-cover">
               <div class="detail-shimmer"></div>
               <img id="gp-cover" alt="" draggable="false">
-              <span class="gp-recent" id="gp-recent" hidden>Reciente</span>
+              <span class="gp-recent" id="gp-recent" hidden data-i18n="gp.recent">Reciente</span>
             </div>
             <div class="gp-info">
-              <span class="gp-eyebrow">Detalles</span>
+              <span class="gp-eyebrow" data-i18n="gp.details">Detalles</span>
               <h1 class="gp-title" id="gp-title"></h1>
               <div class="gp-badges">
                 <span class="detail-platform" id="gp-platform"></span>
@@ -275,21 +280,21 @@
               </div>
               <button class="gp-play" id="gp-play">
                 <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
-                <span class="gp-play-label">Jugar</span>
+                <span class="gp-play-label" data-i18n="btn.play">Jugar</span>
                 <span class="btn-play-spinner"></span>
               </button>
               <div class="gp-links">
                 <button class="gp-link" id="gp-folder">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                  <span>Abrir ubicación</span>
+                  <span data-i18n="gp.folderBtn">Abrir ubicación</span>
                 </button>
                 <button class="gp-link" id="gp-cover-link">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                  <span>Cambiar portada</span>
+                  <span data-i18n="gp.coverBtn">Cambiar portada</span>
                 </button>
-                <button class="gp-link" id="gp-capture" title="Lanza el juego y guarda una foto real como portada">
+                <button class="gp-link" id="gp-capture" title="Lanza el juego y guarda una foto real como portada" data-i18n-title="gp.captureTitle">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                  <span>Capturar gameplay</span>
+                  <span data-i18n="gp.captureBtn">Capturar gameplay</span>
                 </button>
               </div>
               <div class="gp-meta" id="gp-meta"></div>
@@ -297,12 +302,12 @@
           </div>
 
           <div class="gp-section" id="gp-shots-section">
-            <div class="gp-section-title">Capturas de pantalla</div>
+            <div class="gp-section-title" data-i18n="gp.shotsTitle">Capturas de pantalla</div>
             <div class="gp-shots" id="gp-shots"></div>
           </div>
 
           <div class="gp-section">
-            <div class="gp-section-title">Descripción</div>
+            <div class="gp-section-title" data-i18n="gp.descTitle">Descripción</div>
             <div class="gp-desc" id="gp-desc"></div>
           </div>
         </div>
@@ -315,16 +320,16 @@
     <div class="consoles-topbar">
       <button class="gp-back" id="consoles-back">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        <span>Biblioteca</span>
+        <span data-i18n="gp.back">Biblioteca</span>
       </button>
-      <span class="gp-topbar-label">Consolas</span>
+      <span class="gp-topbar-label" data-i18n="consoles.label">Consolas</span>
       <div class="gp-topbar-spacer"></div>
     </div>
     <div class="consoles-scroll">
       <div class="consoles-head">
-        <span class="consoles-eyebrow">Dashboard</span>
-        <h2>Biblioteca por consolas</h2>
-        <p>Explora tus juegos por plataforma. Haz clic en una consola para ver sus juegos; las consolas empaquetadas con ROMs pendientes también aparecen aquí.</p>
+        <span class="consoles-eyebrow" data-i18n="consoles.dashboard">Dashboard</span>
+        <h2 data-i18n="consoles.title">Biblioteca por consolas</h2>
+        <p data-i18n="consoles.subtitle">Explora tus juegos por plataforma. Haz clic en una consola para ver sus juegos; las consolas empaquetadas con ROMs pendientes también aparecen aquí.</p>
       </div>
       <div id="consoles-grid" class="consoles-grid"></div>
     </div>
@@ -335,13 +340,23 @@
     <div class="drawer-backdrop" data-close-drawer></div>
     <div class="drawer">
       <div class="drawer-header">
-        <h3>Configuración</h3>
-        <button class="drawer-close" data-close-drawer title="Cerrar">✕</button>
+        <h3 data-i18n="settings.title">Configuración</h3>
+        <button class="drawer-close" data-close-drawer title="Cerrar" data-i18n-title="settings.closeTitle">✕</button>
       </div>
       <div class="drawer-body">
 
         <div class="setting-group">
-          <div class="setting-label">Columnas del grid</div>
+          <div class="setting-label" data-i18n="settings.language">Idioma</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-name" data-i18n="settings.languageDesc">Cambia el idioma de la interfaz</div>
+            </div>
+            <select id="set-locale" class="emu-input"></select>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-label" data-i18n="settings.columns">Columnas del grid</div>
           <div class="setting-range">
             <span id="range-col-value">5</span>
             <input type="range" id="set-columns" min="3" max="10" step="1" value="5">
@@ -349,11 +364,11 @@
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Comportamiento</div>
+          <div class="setting-label" data-i18n="settings.behavior">Comportamiento</div>
           <div class="setting-row">
             <div>
-              <div class="setting-name">Analizar al iniciar</div>
-              <div class="setting-desc">Buscar juegos automáticamente al abrir</div>
+              <div class="setting-name" data-i18n="settings.autoScan">Analizar al iniciar</div>
+              <div class="setting-desc" data-i18n="settings.autoScanDesc">Buscar juegos automáticamente al abrir</div>
             </div>
             <label class="switch">
               <input type="checkbox" id="set-auto-scan">
@@ -363,21 +378,21 @@
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Color de acento</div>
+          <div class="setting-label" data-i18n="settings.accent">Color de acento</div>
           <div class="accent-row">
-            <button class="accent-dot purple active" data-accent="purple" title="Púrpura"></button>
-            <button class="accent-dot cyan" data-accent="cyan" title="Cian"></button>
-            <button class="accent-dot blue" data-accent="blue" title="Azul"></button>
-            <button class="accent-dot green" data-accent="green" title="Verde"></button>
+            <button class="accent-dot purple active" data-accent="purple" title="Púrpura" data-i18n-title="accent.purple"></button>
+            <button class="accent-dot cyan" data-accent="cyan" title="Cian" data-i18n-title="accent.cyan"></button>
+            <button class="accent-dot blue" data-accent="blue" title="Azul" data-i18n-title="accent.blue"></button>
+            <button class="accent-dot green" data-accent="green" title="Verde" data-i18n-title="accent.green"></button>
           </div>
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Efectos de sonido</div>
+          <div class="setting-label" data-i18n="settings.sound">Efectos de sonido</div>
           <div class="setting-row">
             <div>
-              <div class="setting-name">Sonido de interfaz</div>
-              <div class="setting-desc">Tics de navegación, selección y lanzamiento</div>
+              <div class="setting-name" data-i18n="settings.soundName">Sonido de interfaz</div>
+              <div class="setting-desc" data-i18n="settings.soundDesc">Tics de navegación, selección y lanzamiento</div>
             </div>
             <label class="switch">
               <input type="checkbox" id="setting-sound" checked>
@@ -387,60 +402,60 @@
         </div>
 
         <div class="setting-group hidden" id="env-warn-group">
-          <div class="setting-label">Requisitos del sistema</div>
+          <div class="setting-label" data-i18n="env.title">Requisitos del sistema</div>
           <div class="env-warn" id="env-warn">
-            <div class="env-warn-text">Falta el <b>Microsoft Visual C++ 2015-2022 Redistributable (x64)</b>.
+            <div class="env-warn-text" data-i18n-inner="env.text">Falta el <b>Microsoft Visual C++ 2015-2022 Redistributable (x64)</b>.
             Los emuladores incluidos PS2 (PCSX2) y GameCube/Wii (Dolphin) lo necesitan para funcionar.</div>
             <div class="drawer-actions env-actions">
-              <button class="btn-primary" id="env-download-vc">Descargar</button>
-              <button class="btn-secondary" id="env-skip-vc">Ya lo instalé</button>
+              <button class="btn-primary" id="env-download-vc" data-i18n="env.download">Descargar</button>
+              <button class="btn-secondary" id="env-skip-vc" data-i18n="env.installed">Ya lo instalé</button>
             </div>
           </div>
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Claves de API (portadas y descripciones en español)</div>
+          <div class="setting-label" data-i18n="settings.apiKeys">Claves de API (portadas y descripciones en español)</div>
           <div class="setting-row">
             <div>
-              <div class="setting-name">RAWG.io API Key</div>
-              <div class="setting-desc">Descripciones en español y portadas de todas las plataformas (gratis en rawi.io/api)</div>
+              <div class="setting-name" data-i18n="settings.rawgName">RAWG.io API Key</div>
+              <div class="setting-desc" data-i18n="settings.rawgDesc">Descripciones en español y portadas de todas las plataformas (gratis en rawi.io/api)</div>
             </div>
           </div>
-          <input type="password" class="api-key-input" id="set-rawg-key" placeholder="Tu clave de RAWG (opcional)">
+          <input type="password" class="api-key-input" id="set-rawg-key" placeholder="Tu clave de RAWG (opcional)" data-i18n-placeholder="settings.rawgPlaceholder">
           <div class="setting-row">
             <div>
-              <div class="setting-name">SteamGridDB API Key</div>
-              <div class="setting-desc">Portadas verticales profesionales (opcional, steamgriddb.com)</div>
+              <div class="setting-name" data-i18n="settings.sgdbName">SteamGridDB API Key</div>
+              <div class="setting-desc" data-i18n="settings.sgdbDesc">Portadas verticales profesionales (opcional, steamgriddb.com)</div>
             </div>
           </div>
-          <input type="password" class="api-key-input" id="set-sgdb-key" placeholder="Tu clave de SteamGridDB (opcional)">
+          <input type="password" class="api-key-input" id="set-sgdb-key" placeholder="Tu clave de SteamGridDB (opcional)" data-i18n-placeholder="settings.sgdbPlaceholder">
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Carpetas personalizadas</div>
+          <div class="setting-label" data-i18n="settings.customFolders">Carpetas personalizadas</div>
           <div id="settings-folders"></div>
           <div class="drawer-actions">
-            <button class="btn-primary" id="settings-add-folder">Añadir carpeta</button>
+            <button class="btn-primary" id="settings-add-folder" data-i18n="folders.addButton">Añadir carpeta</button>
           </div>
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Emuladores (juegos retro)</div>
+          <div class="setting-label" data-i18n="settings.emulators">Emuladores (juegos retro)</div>
           <div id="settings-emulators"></div>
 
           <div class="emu-form">
             <div class="setting-row">
               <div>
-                <div class="setting-name">Emulador conocido</div>
-                <div class="setting-desc">Preselecciona nombre y consola</div>
+                <div class="setting-name" data-i18n="settings.emuKnown">Emulador conocido</div>
+                <div class="setting-desc" data-i18n="settings.emuKnownDesc">Preselecciona nombre y consola</div>
               </div>
             </div>
             <select id="emu-preset" class="emu-input">
-              <option value="">— Personalizado —</option>
+              <option value="" data-i18n="emu.custom">— Personalizado —</option>
             </select>
 
-            <input type="text" id="emu-name" class="emu-input" placeholder="Nombre (ej. Snes9x)" autocomplete="off" spellcheck="false">
-            <input type="text" id="emu-console" class="emu-input" list="emu-console-list" placeholder="Consola (ej. SNES)" autocomplete="off" spellcheck="false">
+            <input type="text" id="emu-name" class="emu-input" placeholder="Nombre (ej. Snes9x)" data-i18n-placeholder="settings.emuNamePlaceholder" autocomplete="off" spellcheck="false">
+            <input type="text" id="emu-console" class="emu-input" list="emu-console-list" placeholder="Consola (ej. SNES)" data-i18n-placeholder="settings.emuConsolePlaceholder" autocomplete="off" spellcheck="false">
             <datalist id="emu-console-list">
               <option value="NES"></option>
               <option value="SNES"></option>
@@ -463,63 +478,63 @@
             </datalist>
 
             <div class="emu-path-row">
-              <input type="text" id="emu-exe" class="emu-input" placeholder="Ruta al ejecutable (.exe)" autocomplete="off" spellcheck="false">
-              <button class="btn-secondary emu-pick" id="emu-pick-exe" title="Seleccionar ejecutable">…</button>
+              <input type="text" id="emu-exe" class="emu-input" placeholder="Ruta al ejecutable (.exe)" data-i18n-placeholder="settings.emuExePlaceholder" autocomplete="off" spellcheck="false">
+              <button class="btn-secondary emu-pick" id="emu-pick-exe" title="Seleccionar ejecutable" data-i18n-title="settings.pickExeTitle">…</button>
             </div>
             <div class="emu-path-row">
-              <input type="text" id="emu-roms" class="emu-input" placeholder="Carpeta de ROMs" autocomplete="off" spellcheck="false">
-              <button class="btn-secondary emu-pick" id="emu-pick-roms" title="Seleccionar carpeta de ROMs">…</button>
+              <input type="text" id="emu-roms" class="emu-input" placeholder="Carpeta de ROMs" data-i18n-placeholder="settings.emuRomsPlaceholder" autocomplete="off" spellcheck="false">
+              <button class="btn-secondary emu-pick" id="emu-pick-roms" title="Seleccionar carpeta de ROMs" data-i18n-title="settings.pickRomsTitle">…</button>
             </div>
 
-            <input type="text" id="emu-args" class="emu-input" placeholder="Argumentos extra (opcional)" autocomplete="off" spellcheck="false">
+            <input type="text" id="emu-args" class="emu-input" placeholder="Argumentos extra (opcional)" data-i18n-placeholder="settings.emuArgsPlaceholder" autocomplete="off" spellcheck="false">
 
             <div class="drawer-actions">
-              <button class="btn-primary" id="emu-add">Añadir emulador</button>
+              <button class="btn-primary" id="emu-add" data-i18n="emu.addButton">Añadir emulador</button>
             </div>
           </div>
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Añadir juego manualmente</div>
+          <div class="setting-label" data-i18n="settings.addManual">Añadir juego manualmente</div>
           <div class="setting-row">
             <div>
-              <div class="setting-name">Juego no detectado</div>
-              <div class="setting-desc">Agrega un ejecutable que el análisis no haya encontrado.</div>
+              <div class="setting-name" data-i18n="settings.manualUndetected">Juego no detectado</div>
+              <div class="setting-desc" data-i18n="settings.manualDesc">Agrega un ejecutable que el análisis no haya encontrado.</div>
             </div>
           </div>
-          <input type="text" id="manual-name" class="emu-input" placeholder="Nombre del juego" autocomplete="off" spellcheck="false">
+          <input type="text" id="manual-name" class="emu-input" placeholder="Nombre del juego" data-i18n-placeholder="settings.manualNamePlaceholder" autocomplete="off" spellcheck="false">
           <div class="emu-path-row">
-            <input type="text" id="manual-exe" class="emu-input" placeholder="Ruta al ejecutable (.exe)" readonly autocomplete="off" spellcheck="false">
-            <button class="btn-secondary emu-pick" id="manual-pick-exe" title="Seleccionar ejecutable">…</button>
+            <input type="text" id="manual-exe" class="emu-input" placeholder="Ruta al ejecutable (.exe)" data-i18n-placeholder="settings.emuExePlaceholder" readonly autocomplete="off" spellcheck="false">
+            <button class="btn-secondary emu-pick" id="manual-pick-exe" title="Seleccionar ejecutable" data-i18n-title="settings.pickExeTitle">…</button>
           </div>
           <div class="drawer-actions">
-            <button class="btn-primary" id="manual-add">Añadir juego</button>
+            <button class="btn-primary" id="manual-add" data-i18n="manual.addButton">Añadir juego</button>
           </div>
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Actualizaciones</div>
+          <div class="setting-label" data-i18n="settings.updates">Actualizaciones</div>
           <div class="setting-row">
             <div>
-              <div class="setting-name">Buscar nueva versión</div>
-              <div class="setting-desc" id="update-status-text">Comprueba si hay una versión más reciente disponible en GitHub.</div>
+              <div class="setting-name" data-i18n="settings.checkNew">Buscar nueva versión</div>
+              <div class="setting-desc" id="update-status-text" data-i18n="settings.updateStatus">Comprueba si hay una versión más reciente disponible en GitHub.</div>
             </div>
-            <button class="btn-secondary" id="btn-check-updates">Buscar</button>
+            <button class="btn-secondary" id="btn-check-updates" data-i18n="settings.checkNow">Buscar</button>
           </div>
           <div id="update-result" class="update-result hidden"></div>
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Datos de configuración</div>
+          <div class="setting-label" data-i18n="settings.configData">Datos de configuración</div>
           <div class="setting-row">
             <div>
-              <div class="setting-name">Respaldo / portabilidad</div>
-              <div class="setting-desc">Exporta ajustes, carpetas y emuladores a un archivo JSON. Las portadas personalizadas se conservan en la app.</div>
+              <div class="setting-name" data-i18n="settings.backup">Respaldo / portabilidad</div>
+              <div class="setting-desc" data-i18n="settings.backupDesc">Exporta ajustes, carpetas y emuladores a un archivo JSON. Las portadas personalizadas se conservan en la app.</div>
             </div>
           </div>
           <div class="drawer-actions">
-            <button class="btn-secondary" id="export-config-btn">Exportar</button>
-            <button class="btn-secondary" id="import-config-btn">Importar</button>
+            <button class="btn-secondary" id="export-config-btn" data-i18n="settings.export">Exportar</button>
+            <button class="btn-secondary" id="import-config-btn" data-i18n="settings.import">Importar</button>
           </div>
         </div>
 
@@ -532,22 +547,22 @@
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal">
       <div class="modal-header">
-        <h3 id="cover-modal-title">Portada</h3>
-        <button class="modal-close" data-close-modal title="Cerrar">✕</button>
+        <h3 id="cover-modal-title" data-i18n="cover.title">Portada</h3>
+        <button class="modal-close" data-close-modal title="Cerrar" data-i18n-title="settings.closeTitle">✕</button>
       </div>
       <div class="modal-body">
         <div class="modal-search-row">
-          <input type="text" id="cover-search-input" placeholder="Escribe el nombre del juego..." autocomplete="off" spellcheck="false">
-          <button class="btn-primary" id="cover-search-btn">Buscar</button>
+          <input type="text" id="cover-search-input" placeholder="Escribe el nombre del juego..." data-i18n-placeholder="cover.placeholder" autocomplete="off" spellcheck="false">
+          <button class="btn-primary" id="cover-search-btn" data-i18n="cover.search">Buscar</button>
         </div>
         <div class="modal-actions">
           <button class="btn-secondary" id="cover-upload-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Subir imagen
+            <span data-i18n="cover.upload">Subir imagen</span>
           </button>
         </div>
         <div id="cover-results" class="cover-results">
-          <div class="cover-hint">Busca imágenes online o sube tu propia portada</div>
+          <div class="cover-hint" data-i18n="cover.searchHint">Busca imágenes online o sube tu propia portada</div>
         </div>
       </div>
     </div>
@@ -557,31 +572,31 @@
   <div id="context-menu" class="hidden">
     <div class="ctx-item" data-action="play">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
-      <span>Lanzar</span>
+      <span data-i18n="ctx.play">Lanzar</span>
     </div>
     <div class="ctx-divider"></div>
     <div class="ctx-item" data-action="set-cover">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-      <span>Cambiar portada</span>
+      <span data-i18n="ctx.changeCover">Cambiar portada</span>
     </div>
     <div class="ctx-item" data-action="search-artwork">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <span>Buscar portada en línea</span>
+      <span data-i18n="ctx.searchArt">Buscar portada en línea</span>
     </div>
     <div class="ctx-divider"></div>
     <div class="ctx-item" data-action="open-folder">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      <span>Abrir ubicación</span>
+      <span data-i18n="ctx.openFolder">Abrir ubicación</span>
     </div>
     <div class="ctx-divider"></div>
     <div class="ctx-item ctx-danger" data-action="remove">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-      <span>Quitar de la biblioteca</span>
+      <span data-i18n="ctx.removeLib">Quitar de la biblioteca</span>
     </div>
     <div class="ctx-divider"></div>
     <div class="ctx-item ctx-danger" data-action="delete-disk">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-      <span>Eliminar de la PC</span>
+      <span data-i18n="ctx.deleteDisk">Eliminar de la PC</span>
     </div>
   </div>
 
@@ -598,8 +613,8 @@
   <div id="update-banner" class="hidden" aria-hidden="true">
     <span class="update-banner-icon" id="update-banner-icon">•</span>
     <span class="update-banner-text" id="update-banner-text"></span>
-    <button class="update-banner-btn hidden" id="update-banner-btn">Reiniciar y actualizar</button>
-    <button class="update-banner-dismiss" id="update-banner-dismiss" aria-label="Cerrar">×</button>
+    <button class="update-banner-btn hidden" id="update-banner-btn" data-i18n="banner.restart">Reiniciar y actualizar</button>
+    <button class="update-banner-dismiss" id="update-banner-dismiss" aria-label="Cerrar" data-i18n-aria-label="banner.dismiss">×</button>
   </div>
 
   <!-- ═══════════ CAPTURA PREVIEW ═══════════ -->
@@ -607,7 +622,7 @@
     <div class="shot-backdrop" id="shot-close"></div>
     <div class="shot-wrap">
       <img id="shot-img" alt="" draggable="false">
-      <span class="shot-hint">Esc para cerrar</span>
+      <span class="shot-hint" data-i18n="shot.hint">Esc para cerrar</span>
     </div>
   </div>
 
@@ -617,7 +632,7 @@
     <div class="launch-card">
       <img id="launch-cover" alt="" draggable="false">
       <div class="launch-title" id="launch-title"></div>
-      <div class="launch-sub">Iniciando...</div>
+      <div class="launch-sub" data-i18n="launch.starting">Iniciando...</div>
     </div>
   </div>
 
@@ -631,7 +646,7 @@
     <div class="home-shade"></div>
     <div class="home-top">
       <span class="home-brand">GAMEVAULT</span>
-      <span class="home-sub">Multi-Platform Launcher</span>
+      <span class="home-sub" data-i18n="app.tagline">Multi-Platform Launcher</span>
     </div>
     <div class="home-layout">
       <div class="home-feature">
@@ -640,25 +655,25 @@
           <img id="home-cover-img" alt="Jugar" draggable="false">
         </div>
         <div class="home-feature-info">
-          <span class="home-eyebrow">Jugar</span>
+          <span class="home-eyebrow" data-i18n="btn.play">Jugar</span>
           <h2 class="home-title" id="home-title"></h2>
           <p class="home-desc" id="home-desc"></p>
           <div class="home-actions">
             <button class="home-btn home-btn-primary" id="home-play">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
-              Continuar
+              <span data-i18n="home.continue">Continuar</span>
             </button>
-            <button class="home-btn" id="home-library">Biblioteca</button>
-            <button class="home-btn" id="home-arcade">Modo Arcade</button>
+            <button class="home-btn" id="home-library"><span data-i18n="home.library">Biblioteca</span></button>
+            <button class="home-btn" id="home-arcade"><span data-i18n="home.arcade">Modo Arcade</span></button>
           </div>
         </div>
       </div>
       <div class="home-quick">
-        <div class="home-quick-title">Recién jugados</div>
+        <div class="home-quick-title" data-i18n="home.recentTitle">Recién jugados</div>
         <div id="home-recent" class="home-recent"></div>
       </div>
     </div>
-    <div class="home-hint">↑ ↓ elegir · Enter confirmar · Esc saltar</div>
+    <div class="home-hint" data-i18n="home.hint">↑ ↓ elegir · Enter confirmar · Esc saltar</div>
   </div>
 
   <!-- ═══════════ ARCADE MODE ═══════════ -->
@@ -668,7 +683,7 @@
     <div class="arcade-top">
       <span class="arcade-brand">GAMEVAULT</span>
       <span class="arcade-counter" id="arcade-counter"></span>
-      <button class="arcade-exit" id="arcade-exit" title="Salir del modo arcade">✕</button>
+      <button class="arcade-exit" id="arcade-exit" title="Salir del modo arcade" data-i18n-title="arcade.exit">✕</button>
     </div>
     <div class="arcade-content">
       <div class="arcade-cover" id="arcade-cover-wrap">
@@ -681,12 +696,13 @@
       </div>
       <button class="arcade-play" id="arcade-play">
         <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
-        <span>Jugar</span>
+        <span data-i18n="btn.play">Jugar</span>
       </button>
-      <div class="arcade-hint">← →  cambiar  ·  Enter  jugar  ·  Esc  salir</div>
+      <div class="arcade-hint" data-i18n="arcade.hint">← →  cambiar  ·  Enter  jugar  ·  Esc  salir</div>
     </div>
   </div>
 
+  <script src="../i18n/dict.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
