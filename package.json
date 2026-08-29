@@ -1,7 +1,7 @@
 {
   "name": "gamevault",
   "productName": "GameVault",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "GameVault - Modern multi-platform game launcher",
   "author": "Riuyi231",
   "main": "src/main.js",
