@@ -31,36 +31,37 @@ jobs:
           $tag = "${env:GITHUB_REF_NAME}"
           $repo = "Riuyi231/gamevault"
 
-          function Get-TagDrafts {
-            gh release list --repo $repo --json tagName,databaseId,isDraft,assets |
+          function Get-TagReleases {
+            gh api "repos/$repo/releases" --paginate |
               ConvertFrom-Json |
-              Where-Object { $_.tagName -eq $tag }
+              Where-Object { $_.tag_name -eq $tag }
           }
 
           # electron-builder may create BOTH a draft with the full installer and an
           # orphan draft (blockmap only). Keep the draft that holds the .exe.
-          $mine = @(Get-TagDrafts)
+          $mine = @(Get-TagReleases)
           $main = $mine | Where-Object {
             @($_.assets | ForEach-Object { $_.name }) -match '\.exe$'
           } | Select-Object -First 1
           if (-not $main) { $main = $mine | Select-Object -First 1 }
 
           if (@($mine).Count -gt 1) {
+            $mainId = $main.id
             foreach ($r in $mine) {
-              if ($r.databaseId -ne $main.databaseId) {
-                gh api -X DELETE "repos/$repo/releases/$($r.databaseId)" | Out-Null
+              if ($r.id -ne $mainId) {
+                gh api -X DELETE "repos/$repo/releases/$($r.id)" | Out-Null
               }
             }
           }
 
-          gh release edit $tag --repo $repo --draft=false
-          gh release edit $tag --repo $repo --latest
+          # Publish the keep release by its id (tag may match multiple releases)
+          gh api -X PATCH "repos/$repo/releases/$($main.id)" -F draft=false -F make_latest=true | Out-Null
 
           # Sweep orphans created right after the publish step
           Start-Sleep -Seconds 3
-          foreach ($r in @(Get-TagDrafts)) {
-            if ($r.isDraft) {
-              gh api -X DELETE "repos/$repo/releases/$($r.databaseId)" | Out-Null
+          foreach ($r in @(Get-TagReleases)) {
+            if ($r.draft) {
+              gh api -X DELETE "repos/$repo/releases/$($r.id)" | Out-Null
             }
           }
         env:
