@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const chokidar = require('chokidar');
 const { autoUpdater } = require('electron-updater');
 const GameDetector = require('./services/game-detect');
@@ -79,6 +79,31 @@ function splitArgs(input) {
     result.push(m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]);
   }
   return result;
+}
+
+// Comprueba si el Microsoft Visual C++ 2015-2022 Redistributable (x64) está
+// instalado. PCSX2 y Dolphin (emuladores incluidos) lo requieren.
+function isVcRedistInstalled() {
+  const keys = [
+    'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64',
+    'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64',
+    'HKCU\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64'
+  ];
+  for (const key of keys) {
+    try {
+      const r = spawnSync('reg', ['query', key, '/v', 'Installed'], {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: 8000
+      });
+      if (r.status === 0 && r.stdout && /Installed\s+REG_DWORD\s+0x1/i.test(r.stdout)) {
+        return true;
+      }
+    } catch {
+      // siguiente clave
+    }
+  }
+  return false;
 }
 
 function createWindow() {
@@ -451,6 +476,79 @@ function setupIPC() {
       return { ok: true, localCoverPath: saved };
     }
     return { ok: false };
+  });
+
+  ipcMain.handle('open-external', async (event, url) => {
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      await shell.openExternal(url);
+      return { ok: true };
+    }
+    return { ok: false };
+  });
+
+  ipcMain.handle('check-env', async () => {
+    return { vcredistMissing: !isVcRedistInstalled() };
+  });
+
+  ipcMain.handle('export-config', async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Exportar configuración de GameVault',
+      defaultPath: `gamevault-config-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    });
+    if (canceled || !filePath) return { ok: false, canceled: true };
+
+    const payload = {
+      app: 'gamevault',
+      version: app.getVersion(),
+      exportedAt: new Date().toISOString(),
+      settings: gameStore.getSettings(),
+      customFolders: gameStore.getCustomFolders(),
+      emulators: gameStore
+        .getEmulators()
+        .filter((e) => !String(e.id || '').startsWith('bundled-'))
+        .map((e) => ({ ...e }))
+    };
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf-8');
+      return { ok: true, filePath };
+    } catch (err) {
+      logError('Export config failed:', err);
+      return { ok: false, error: 'write' };
+    }
+  });
+
+  ipcMain.handle('import-config', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Importar configuración de GameVault',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['openFile']
+    });
+    if (canceled || !filePaths || !filePaths[0]) return { ok: false, canceled: true };
+
+    let payload;
+    try {
+      payload = JSON.parse(fs.readFileSync(filePaths[0], 'utf-8'));
+    } catch {
+      return { ok: false, error: 'invalid-json' };
+    }
+    if (!payload || payload.app !== 'gamevault') return { ok: false, error: 'not-gamevault' };
+
+    if (payload.settings && typeof payload.settings === 'object') {
+      gameStore.updateSettings(payload.settings);
+      syncServiceKeys(payload.settings);
+    }
+    if (Array.isArray(payload.customFolders)) {
+      gameStore.setCustomFolders(payload.customFolders);
+      rebuildWatcher();
+    }
+    if (Array.isArray(payload.emulators)) {
+      gameStore.setEmulators(
+        payload.emulators.filter((e) => e && e.id && !String(e.id).startsWith('bundled-'))
+      );
+    }
+    startPeriodicRescan();
+    return { ok: true };
   });
 
   ipcMain.handle('get-settings', async () => {

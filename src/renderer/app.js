@@ -310,6 +310,7 @@
       state.allGames = games || [];
       updateCounts();
       applyVisible();
+      if (typeof loadEmulators === 'function') loadEmulators();
     } catch (err) {
       console.error('Failed to load games:', err);
     }
@@ -423,6 +424,9 @@
         break;
       case 'mostplayed':
         games.sort((a, b) => (b.playtimeMs || 0) - (a.playtimeMs || 0));
+        break;
+      case 'added':
+        games.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
         break;
       default:
         games.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
@@ -1873,14 +1877,35 @@
       const item = document.createElement('div');
       item.className = 'emu-item';
       const bundledBadge = emu.bundled ? '<span class="emu-bundled">Incluido</span> ' : '';
+      const retroCount = state.allGames
+        ? state.allGames.filter(
+            (g) => g.source === 'retro' && (g.platform || '') === (emu.console || '')
+          ).length
+        : 0;
+      const statusText =
+        retroCount === 0
+          ? 'Sin ROMs todavía'
+          : retroCount === 1
+            ? '1 juego encontrado'
+            : retroCount + ' juegos encontrados';
+      const openBtn = emu.romsPath
+        ? `<button class="emu-open" data-path="${esc(emu.romsPath)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Abrir ROMs</button>`
+        : '';
       item.innerHTML = `
         <div class="emu-item-info">
           <div class="emu-item-name">${bundledBadge}${esc(emu.name)}</div>
           <div class="emu-item-console">${esc(emu.console || 'Retro')}</div>
           <div class="emu-item-paths">${esc(emu.exePath)}${emu.romsPath ? '<br>' + esc(emu.romsPath) : ''}</div>
+          <div class="emu-item-status"><span class="emu-status-text ${retroCount === 0 ? 'emu-status-empty' : ''}">${statusText}</span> ${openBtn}</div>
         </div>
         <button class="emu-remove" data-id="${esc(emu.id)}" title="Quitar emulador">✕</button>
       `;
+      const openRoms = item.querySelector('.emu-open');
+      if (openRoms) {
+        openRoms.addEventListener('click', async () => {
+          await api.openFolder(openRoms.dataset.path);
+        });
+      }
       item.querySelector('.emu-remove').addEventListener('click', async (e) => {
         e.stopPropagation();
         try {
@@ -2031,6 +2056,66 @@
     saveSettings({ sound: e.target.checked });
     if (e.target.checked) {
       Sound.select();
+    }
+  });
+
+  /* requisitos del sistema (VC++ Redistributable) */
+  function showEnvWarning(show) {
+    const group = $('#env-warn-group');
+    if (group) group.classList.toggle('hidden', !show);
+  }
+
+  (async () => {
+    try {
+      const env = await api.checkEnv();
+      showEnvWarning(!!(env && env.vcredistMissing));
+    } catch {
+      showEnvWarning(false);
+    }
+  })();
+
+  const vcDownload = $('#env-download-vc');
+  if (vcDownload) {
+    vcDownload.addEventListener('click', () => {
+      api.openExternal('https://aka.ms/vs/17/release/vc_redist.x64.exe');
+    });
+  }
+  const vcSkip = $('#env-skip-vc');
+  if (vcSkip) {
+    vcSkip.addEventListener('click', () => showEnvWarning(false));
+  }
+
+  /* exportar / importar configuración */
+  $('#export-config-btn').addEventListener('click', async () => {
+    try {
+      const r = await api.exportConfig();
+      if (r && r.ok) toast('Configuración exportada', 'success');
+      else if (r && !r.canceled) toast('No se pudo exportar la configuración', 'error');
+    } catch (err) {
+      console.error('Export config failed:', err);
+      toast('No se pudo exportar la configuración', 'error');
+    }
+  });
+
+  $('#import-config-btn').addEventListener('click', async () => {
+    try {
+      const r = await api.importConfig();
+      if (r && r.ok) {
+        toast('Configuración importada', 'success');
+        await loadSettings();
+        await loadFolders();
+        loadEmulators();
+        api.rescan();
+      } else if (r && r.error === 'invalid-json') {
+        toast('El archivo no es un JSON válido', 'error');
+      } else if (r && r.error === 'not-gamevault') {
+        toast('El archivo no es una configuración de GameVault', 'error');
+      } else if (r && !r.canceled) {
+        toast('No se pudo importar la configuración', 'error');
+      }
+    } catch (err) {
+      console.error('Import config failed:', err);
+      toast('No se pudo importar la configuración', 'error');
     }
   });
 
@@ -2408,10 +2493,12 @@
 
   api.onGameAdded((game) => {
     mergeGame(game);
+    if (typeof loadEmulators === 'function') loadEmulators();
   });
 
   api.onGameRemoved((id) => {
     removeGameFromState(id);
+    if (typeof loadEmulators === 'function') loadEmulators();
   });
 
   /* ═══════════════ INIT ═══════════════ */

@@ -178,6 +178,14 @@ class GameStore {
     return removed;
   }
 
+  setCustomFolders(folders) {
+    this._data.customFolders = Array.isArray(folders)
+      ? folders.filter((f) => typeof f === 'string' && f.trim())
+      : [];
+    this._save();
+    return this.getCustomFolders();
+  }
+
   /* ─── EMULATORS ─── */
 
   getEmulators() {
@@ -214,6 +222,14 @@ class GameStore {
       return true;
     }
     return false;
+  }
+
+  setEmulators(emulators) {
+    this._data.emulators = Array.isArray(emulators)
+      ? emulators.filter((e) => e && typeof e === 'object' && e.id)
+      : [];
+    this._save();
+    return this.getEmulators();
   }
 
   /* ─── SETTINGS ─── */

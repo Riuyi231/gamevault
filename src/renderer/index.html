@@ -173,6 +173,7 @@
               <option value="platform">Plataforma</option>
               <option value="recent">Recientes</option>
               <option value="mostplayed">Más jugado</option>
+              <option value="added">Añadidos</option>
             </select>
             <div class="columns-ctrl" title="Columnas">
               <button class="col-btn" id="col-minus" title="Menos columnas">−</button>
@@ -348,6 +349,18 @@
           </div>
         </div>
 
+        <div class="setting-group hidden" id="env-warn-group">
+          <div class="setting-label">Requisitos del sistema</div>
+          <div class="env-warn" id="env-warn">
+            <div class="env-warn-text">Falta el <b>Microsoft Visual C++ 2015-2022 Redistributable (x64)</b>.
+            Los emuladores incluidos PS2 (PCSX2) y GameCube/Wii (Dolphin) lo necesitan para funcionar.</div>
+            <div class="drawer-actions env-actions">
+              <button class="btn-primary" id="env-download-vc">Descargar</button>
+              <button class="btn-secondary" id="env-skip-vc">Ya lo instalé</button>
+            </div>
+          </div>
+        </div>
+
         <div class="setting-group">
           <div class="setting-label">Claves de API (portadas y descripciones en español)</div>
           <div class="setting-row">
@@ -457,6 +470,20 @@
             <button class="btn-secondary" id="btn-check-updates">Buscar</button>
           </div>
           <div id="update-result" class="update-result hidden"></div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-label">Datos de configuración</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-name">Respaldo / portabilidad</div>
+              <div class="setting-desc">Exporta ajustes, carpetas y emuladores a un archivo JSON. Las portadas personalizadas se conservan en la app.</div>
+            </div>
+          </div>
+          <div class="drawer-actions">
+            <button class="btn-secondary" id="export-config-btn">Exportar</button>
+            <button class="btn-secondary" id="import-config-btn">Importar</button>
+          </div>
         </div>
 
       </div>
