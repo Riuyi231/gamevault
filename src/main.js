@@ -139,6 +139,24 @@ function resolveExe(exePath, installDir) {
   return p;
 }
 
+// WINDOWS: algunos juegos piden elevación (manifiesto requireAdministrator,
+// anti-cheat...) y el spawn directo de Node falla con EACCES/EPERM aunque el
+// .exe exista; ShellExecute (shell.openPath) gestiona el prompt de UAC y los
+// abre. Usado como reintento cuando spawn no pudo arrancar el proceso.
+async function launchViaShell(exePath) {
+  try {
+    const res = await shell.openPath(exePath);
+    if (typeof res === 'string' && res) return { ok: false, error: res };
+    return { ok: true, viaShell: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+function needsShellFallback(launchErr) {
+  return process.platform === 'win32' && /EACCES|EPERM/.test(String(launchErr || ''));
+}
+
 // Starts a game's process (native exe, emulator+ROM or launcher URI) and starts
 // a playtime session. Returns { success, viaLauncher, pid } or { success:false, error }.
 async function openGameProcess(game) {
@@ -156,7 +174,19 @@ async function openGameProcess(game) {
         detached: true,
         stdio: 'ignore'
       });
-      if (!launched.ok) return { success: false, error: launched.error };
+      if (!launched.ok) {
+        if (needsShellFallback(launched.error)) {
+          const via = await launchViaShell(emuPath);
+          if (via.ok) {
+            gameStore.updateGame(id, { lastPlayed: Date.now(), exePath: emuPath });
+            startPlaySession(game, null, true);
+            log('Launched (retro, via ShellExecute):', game.name, emuPath, '->', game.romPath);
+            return { success: true, viaLauncher: true };
+          }
+          return { success: false, error: via.error || launched.error };
+        }
+        return { success: false, error: launched.error };
+      }
       gameStore.updateGame(id, { lastPlayed: Date.now(), exePath: emuPath });
       startPlaySession(game, launched.pid);
       log('Launched (retro):', game.name, emuPath, '->', game.romPath);
@@ -202,7 +232,19 @@ async function openGameProcess(game) {
       detached: true,
       stdio: 'ignore'
     });
-    if (!launched.ok) return { success: false, error: launched.error };
+    if (!launched.ok) {
+      if (needsShellFallback(launched.error)) {
+        const via = await launchViaShell(exePath);
+        if (via.ok) {
+          gameStore.updateGame(id, { lastPlayed: Date.now() });
+          startPlaySession(game, null, true);
+          log('Launched via ShellExecute:', game.name, exePath);
+          return { success: true, viaLauncher: true };
+        }
+        return { success: false, error: via.error || launched.error };
+      }
+      return { success: false, error: launched.error };
+    }
     gameStore.updateGame(id, { lastPlayed: Date.now() });
     startPlaySession(game, launched.pid);
     log('Launched:', game.name, exePath);
