@@ -550,7 +550,7 @@
       card.style.setProperty('--tilt-scale', '1');
     });
     card.addEventListener('click', () => {
-      selectGame(game.id);
+      openGamePage(game.id);
       Sound.select();
     });
     card.addEventListener('dblclick', () => launchGame(game.id));
@@ -605,18 +605,28 @@
   }
 
   /* ═══════════════ DETAIL PANEL ═══════════════ */
+  let hideDetailTimer = null;
+
   function showDetail() {
-    const panel = $('#detail-panel');
-    panel.classList.remove('closing');
-    panel.classList.add('open');
-    panel.setAttribute('aria-hidden', 'false');
+    const page = $('#game-page');
+    clearTimeout(hideDetailTimer);
+    page.classList.remove('closing');
+    page.classList.remove('hidden');
+    page.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => page.classList.add('open'));
   }
 
   function hideDetail() {
-    const panel = $('#detail-panel');
-    panel.classList.remove('open');
-    panel.classList.add('closing');
-    panel.setAttribute('aria-hidden', 'true');
+    const page = $('#game-page');
+    page.classList.remove('open');
+    page.classList.add('closing');
+    page.setAttribute('aria-hidden', 'true');
+    clearTimeout(hideDetailTimer);
+    hideDetailTimer = setTimeout(() => page.classList.add('hidden'), 420);
+  }
+
+  function gamePageOpen() {
+    return $('#game-page').classList.contains('open');
   }
 
   function selectGame(id) {
@@ -631,13 +641,20 @@
 
     const game = state.allGames.find((g) => g.id === id) || state.visibleGames.find((g) => g.id === id);
     if (game) {
-      const wasOpen = $('#detail-panel').classList.contains('open');
-      if (!wasOpen) playPortal(card);
-      renderDetailPanel(game);
       renderHero(game);
       heroApplyDesc(game);
     }
+  }
 
+  function openGamePage(id) {
+    const game = state.allGames.find((g) => g.id === id) || state.visibleGames.find((g) => g.id === id);
+    if (!game) return;
+    selectGame(id);
+    if (!gamePageOpen()) {
+      const card = $(`.game-card[data-id="${id}"]`);
+      if (card) playPortal(card);
+      renderDetailPanel(game);
+    }
     Sound.unlock();
   }
 
@@ -682,7 +699,11 @@
     }
     showDetail();
 
-    const img = $('#detail-cover');
+    const bg = $('#gp-bg');
+    const bannerSrc = getBannerSrc(game);
+    bg.style.backgroundImage = bannerSrc && bannerSrc !== 'default-cover.svg' ? `url("${bannerSrc}")` : '';
+
+    const img = $('#gp-cover');
     const shimmer = $('.detail-shimmer');
     const coverSrc = getCoverSrc(game);
 
@@ -708,23 +729,31 @@
     };
     loadCover(coverSrc);
 
-    $('#detail-title').textContent = game.name;
+    $('#gp-title').textContent = game.name;
 
     const platformKey = platformKeyOf(game);
-    const platformLabel = platformLabelOf(game);
-    const platEl = $('#detail-platform');
-    platEl.textContent = platformLabel;
+    const platEl = $('#gp-platform');
+    platEl.textContent = platformLabelOf(game);
     platEl.className = 'detail-platform ' + platformKey;
-    $('#detail-source').textContent = game.source === 'retro' ? 'Retro · ' + (game.platform || 'Emulador') : (game.source || game.platform || platformKey);
+    $('#gp-source').textContent = game.source === 'retro'
+      ? 'Retro · ' + (game.platform || 'Emulador')
+      : game.source === 'custom'
+        ? 'Añadido manualmente'
+        : (game.source || game.platform || platformKey);
 
-    const recentEl = $('#detail-recent');
+    const recentEl = $('#gp-recent');
     recentEl.hidden = !isRecent(game);
 
-    renderDetailMeta(game, null);
+    const playtimeEl = $('#gp-playtime');
+    playtimeEl.hidden = !(game.playtimeMs > 0);
+    playtimeEl.textContent = game.playtimeMs > 0 ? formatPlaytime(game.playtimeMs) : '';
 
-    const desc = $('#detail-desc');
-    desc.className = 'detail-desc loading';
-    desc.innerHTML = '<div class="desc-inner">Cargando información...</div>';
+    renderDetailMeta(game, null);
+    renderShots(null);
+
+    const desc = $('#gp-desc');
+    desc.className = 'gp-desc loading';
+    desc.innerHTML = '<div class="gp-desc-inner">Cargando información...</div>';
 
     const id = game.id;
     const cached = state.detailCache.get(id);
@@ -747,18 +776,19 @@
   function applyDetailInfo(id, info) {
     if (state.selectedId !== id) return;
 
-    const desc = $('#detail-desc');
+    const desc = $('#gp-desc');
     const game = state.allGames.find((g) => g.id === id);
     if (game && info && info.banner && !game.bannerUrl) {
       game.bannerUrl = info.banner;
+      $('#gp-bg').style.backgroundImage = `url("${info.banner}")`;
     }
     if (info && (info.detailedDescription || info.about || info.shortDescription)) {
       const descText = info.detailedDescription || info.about || info.shortDescription || '';
-      desc.className = 'detail-desc';
-      desc.innerHTML = `<div class="desc-inner">${esc(descText)}</div>`;
+      desc.className = 'gp-desc';
+      desc.innerHTML = `<div class="gp-desc-inner">${esc(descText)}</div>`;
     } else if (info && info.discoveredName && info.discoveredName !== game.name) {
-      desc.className = 'detail-desc';
-      desc.innerHTML = `<div class="desc-inner">Estás viendo la ficha de "<b>${esc(info.discoveredName)}</b>". Si no es el juego que buscas, usa el menú contextual para buscar una carátula o editar la información.</div>`;
+      desc.className = 'gp-desc';
+      desc.innerHTML = `<div class="gp-desc-inner">Estás viendo la ficha de "<b>${esc(info.discoveredName)}</b>". Si no es el juego que buscas, usa el menú contextual para buscar una carátula o editar la información.</div>`;
     } else {
       const lines = [];
       if (game.source === 'retro') {
@@ -787,55 +817,77 @@
       lines.push(
         'La información detallada de este título no está disponible en la biblioteca de Steam. Puedes buscar una carátula en línea desde el menú contextual.'
       );
-      desc.className = 'detail-desc';
-      desc.innerHTML = `<div class="desc-inner">${lines.join('<br>')}</div>`;
+      desc.className = 'gp-desc';
+      desc.innerHTML = `<div class="gp-desc-inner">${lines.join('<br>')}</div>`;
     }
 
+    renderShots(info);
     renderDetailMeta(game, info);
   }
 
-  function renderDetailMeta(game, info) {
-    const meta = $('#detail-meta');
-    const rows = [];
-
-    const devs = info && info.developers;
-    if (devs && devs.length) {
-      rows.push(metaRow('Desarrolladores', esc(devs.join(', '))));
+  function renderShots(info) {
+    const section = $('#gp-shots-section');
+    const wrap = $('#gp-shots');
+    const shots = (info && Array.isArray(info.screenshots)) ? info.screenshots.filter(Boolean) : [];
+    if (!shots.length) {
+      section.classList.add('hidden');
+      wrap.innerHTML = '';
+      return;
     }
-    const pubs = info && info.publishers;
-    if (pubs && pubs.length) {
-      rows.push(metaRow('Editores', esc(pubs.join(', '))));
-    }
-    if (info && info.releaseDate) {
-      rows.push(metaRow('Lanzamiento', esc(info.releaseDate)));
-    }
-    const genres = info && info.genres;
-    if (genres && genres.length) {
-      const chips = genres.slice(0, 6).map((g) => `<span class="meta-chip">${esc(g)}</span>`).join('');
-      rows.push(`<div class="meta-row"><span class="meta-key">Géneros</span><span class="meta-val">${chips}</span></div>`);
-    }
-    if (game && game.sizeOnDisk) {
-      rows.push(metaRow('Tamaño', `${(game.sizeOnDisk / 1073741824).toFixed(1)} GB`));
-    }
-    if (game && game.playtimeMs > 0) {
-      rows.push(metaRow('Tiempo jugado', formatPlaytime(game.playtimeMs)));
-    }
-    if (info && info.metascore) {
-      rows.push(`<div class="meta-row"><span class="meta-key">Metacritic</span><span class="meta-val"><span class="meta-score">${esc(info.metascore)}</span></span></div>`);
-    }
-    if (info) {
-      if (info.isFree) {
-        rows.push(`<div class="meta-row"><span class="meta-key">Precio</span><span class="meta-val"><span class="meta-price free">Gratis</span></span></div>`);
-      } else if (info.price && info.price.final > 0) {
-        rows.push(metaRow('Precio', `${info.price.final} ${esc(info.price.currency || '')}`));
-      }
-    }
-
-    meta.innerHTML = rows.join('');
+    section.classList.remove('hidden');
+    wrap.innerHTML = '';
+    shots.forEach((src) => {
+      const el = document.createElement('div');
+      el.className = 'gp-shot';
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.draggable = false;
+      img.onerror = () => el.classList.add('gp-shot-missing');
+      img.onclick = () => openShotView(src);
+      el.appendChild(img);
+      wrap.appendChild(el);
+    });
   }
 
-  function metaRow(key, val) {
-    return `<div class="meta-row"><span class="meta-key">${key}</span><span class="meta-val">${val}</span></div>`;
+  function openShotView(src) {
+    const view = $('#shot-view');
+    const img = $('#shot-img');
+    img.src = src;
+    view.classList.remove('hidden');
+  }
+
+  function closeShotView() {
+    const view = $('#shot-view');
+    if (!view.classList.contains('hidden')) {
+      view.classList.add('hidden');
+      $('#shot-img').src = '';
+    }
+  }
+
+  function renderDetailMeta(game, info) {
+    const meta = $('#gp-meta');
+    const stats = [];
+
+    if (info && info.releaseDate) stats.push(stat('Lanzamiento', esc(info.releaseDate)));
+    const metascore = info && (info.metascore || info.rating);
+    if (metascore != null) stats.push(stat('Puntuación', esc(metascore)));
+    if (game && game.sizeOnDisk) stats.push(stat('Tamaño', `${(game.sizeOnDisk / 1073741824).toFixed(1)} GB`));
+    if (game && game.playtimeMs > 0) stats.push(stat('Jugado', formatPlaytime(game.playtimeMs)));
+    if (info && info.developers && info.developers.length) stats.push(stat('Desarrolladores', esc(info.developers.slice(0, 3).join(', '))));
+    if (info && info.publishers && info.publishers.length) stats.push(stat('Editores', esc(info.publishers.slice(0, 2).join(', '))));
+
+    let genresHtml = '';
+    if (info && info.genres && info.genres.length) {
+      genresHtml = `<div class="gp-genres">${info.genres.slice(0, 8).map((g) => `<span class="meta-chip">${esc(g)}</span>`).join('')}</div>`;
+    }
+
+    meta.innerHTML = stats.length ? `<div class="gp-stats">${stats.join('')}</div>${genresHtml}` : (genresHtml || '');
+  }
+
+  function stat(k, v) {
+    return `<div class="gp-stat"><div class="gp-stat-v">${v}</div><div class="gp-stat-k">${k}</div></div>`;
   }
 
   function formatPlaytime(ms) {
@@ -873,7 +925,7 @@
     const game = state.allGames.find((g) => g.id === id);
     if (!game) return;
     Sound.launch();
-    const playBtn = $('#detail-play');
+    const playBtn = $('#gp-play');
     playBtn.classList.add('loading');
     showLaunchOverlay(game);
     try {
@@ -1182,8 +1234,8 @@
   });
   $('#arcade-exit').addEventListener('click', closeArcade);
 
-  /* ═══════════════ DETAIL PANEL WIRING ═══════════════ */
-  $('#detail-play').addEventListener('click', () => {
+  /* ═══════════════ GAME PAGE WIRING ═══════════════ */
+  $('#gp-play').addEventListener('click', () => {
     if (state.selectedId) launchGame(state.selectedId);
   });
 
@@ -1191,27 +1243,36 @@
     if (state.selectedId) launchGame(state.selectedId);
   });
 
-  $('#detail-close').addEventListener('click', () => {
+  $('#gp-back').addEventListener('click', () => {
     if (!state.selectedId) return;
     deselectGame();
   });
 
-  $$('[data-dlink]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (!state.selectedId) return;
-      const game = state.allGames.find((g) => g.id === state.selectedId);
-      if (!game) return;
-      if (btn.dataset.dlink === 'folder') {
-        if (game.installDir) {
-          api.openFolder(game.installDir).catch(() => {});
-        } else if (game.exePath) {
-          api.openFolder(game.exePath.replace(/\\[^\\]*$/, '')).catch(() => {});
-        }
-      } else if (btn.dataset.dlink === 'cover') {
-        openCoverModal(game);
-      }
-    });
+  $('#gp-close').addEventListener('click', () => {
+    if (!state.selectedId) return;
+    deselectGame();
   });
+
+  $('#gp-folder').addEventListener('click', () => {
+    if (!state.selectedId) return;
+    const game = state.allGames.find((g) => g.id === state.selectedId);
+    if (!game) return;
+    if (game.installDir) {
+      api.openFolder(game.installDir).catch(() => {});
+    } else if (game.exePath) {
+      api.openFolder(game.exePath.replace(/\\[^\\]*$/, '')).catch(() => {});
+    } else if (game.romPath) {
+      api.openFolder(game.romPath.replace(/\\[^\\]*$/, '')).catch(() => {});
+    }
+  });
+
+  $('#gp-cover-link').addEventListener('click', () => {
+    if (!state.selectedId) return;
+    const game = state.allGames.find((g) => g.id === state.selectedId);
+    if (game) openCoverModal(game);
+  });
+
+  $('#shot-close').addEventListener('click', closeShotView);
 
   /* ═══════════════ KEYBOARD NAV ═══════════════ */
   const unlockAudioOnce = () => Sound.unlock();
@@ -1223,6 +1284,13 @@
     const modalOpen = !$('#cover-modal').classList.contains('hidden');
     const drawerOpen = !$('#settings-drawer').classList.contains('hidden');
     const menuOpen = !$('#context-menu').classList.contains('hidden');
+    const shotOpen = $('#shot-view') && !$('#shot-view').classList.contains('hidden');
+
+    // Esc siempre cierra primero el visor de capturas
+    if (e.key === 'Escape' && shotOpen) {
+      closeShotView();
+      return;
+    }
 
     // Modo arcade: navegación simplificada
     if (state.arcade) {
@@ -2177,7 +2245,7 @@
                 game.localCoverPath = result.localCoverPath;
                 delete game.localCoverDataUrl;
                 applyVisible();
-                if (state.selectedId === game.id) renderDetailPanel(game);
+                if (state.selectedId === game.id && gamePageOpen()) renderDetailPanel(game);
                 toast('Portada actualizada', 'success');
               } else {
                 toast('No se pudo guardar la portada', 'error');
@@ -2228,7 +2296,7 @@
             game.localCoverPath = result.localCoverPath;
             delete game.localCoverDataUrl;
             applyVisible();
-            if (state.selectedId === game.id) renderDetailPanel(game);
+            if (state.selectedId === game.id && gamePageOpen()) renderDetailPanel(game);
             toast('Portada actualizada', 'success');
           } else {
             toast('No se pudo guardar la portada', 'error');

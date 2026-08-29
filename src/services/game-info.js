@@ -128,6 +128,11 @@ class GameInfoService {
         header: (d.background_image || ''),
         coverUrl: (d.background_image || ''),
         banner: (d.background_image || ''),
+        screenshots: Array.isArray(d.short_screenshots)
+          ? d.short_screenshots.map((s) => s && s.image).filter(Boolean)
+          : Array.isArray(d.screenshots)
+            ? d.screenshots.map((s) => s && s.image).filter(Boolean)
+            : [],
         metacritic: d.metacritic || null,
         rating: d.rating || null,
         source: 'rawg',
@@ -238,6 +243,9 @@ class GameInfoService {
         banner: d.screenshots && d.screenshots[0] ? d.screenshots[0].path_full : (d.header_image || ''),
         header: d.header_image || '',
         coverUrl: d.header_image || '',
+        screenshots: Array.isArray(d.screenshots)
+          ? d.screenshots.map((s) => s && (s.path_full || s.path_thumbnail)).filter(Boolean)
+          : [],
         banner: d.header_image || '',
         source: 'steam'
       };

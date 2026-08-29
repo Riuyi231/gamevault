@@ -229,48 +229,66 @@
         </div>
       </main>
 
-      <!-- DETAIL PANEL -->
-      <aside id="detail-panel" aria-hidden="true">
-        <div class="detail-glow" aria-hidden="true"></div>
-        <div class="detail-header">
-          <span class="detail-header-tag">Detalles</span>
-          <button class="detail-close" id="detail-close" title="Cerrar detalle">
-            <svg width="13" height="13" viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <!-- ═══════════ GAME PAGE (DETALLE A PANTALLA COMPLETA) ═══════════ -->
+      <section id="game-page" aria-hidden="true">
+        <div class="gp-bg" id="gp-bg"></div>
+        <div class="gp-scrim"></div>
+        <div class="gp-topbar">
+          <button class="gp-back" id="gp-back">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Biblioteca</span>
+          </button>
+          <span class="gp-topbar-label">Ficha del juego</span>
+          <button class="gp-close" id="gp-close" title="Cerrar (Esc)">
+            <svg width="14" height="14" viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           </button>
         </div>
-        <div class="detail-scroll">
-          <div class="detail-cover-wrap">
-            <div class="detail-shimmer"></div>
-            <img id="detail-cover" alt="" draggable="false">
-            <span class="detail-recent" id="detail-recent" hidden>Reciente</span>
+
+        <div class="gp-scroll" id="gp-scroll">
+          <div class="gp-hero">
+            <div class="gp-cover">
+              <div class="detail-shimmer"></div>
+              <img id="gp-cover" alt="" draggable="false">
+              <span class="gp-recent" id="gp-recent" hidden>Reciente</span>
+            </div>
+            <div class="gp-info">
+              <span class="gp-eyebrow">Detalles</span>
+              <h1 class="gp-title" id="gp-title"></h1>
+              <div class="gp-badges">
+                <span class="detail-platform" id="gp-platform"></span>
+                <span class="gp-source" id="gp-source"></span>
+                <span class="gp-chip" id="gp-playtime" hidden></span>
+              </div>
+              <button class="gp-play" id="gp-play">
+                <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
+                <span class="gp-play-label">Jugar</span>
+                <span class="btn-play-spinner"></span>
+              </button>
+              <div class="gp-links">
+                <button class="gp-link" id="gp-folder">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span>Abrir ubicación</span>
+                </button>
+                <button class="gp-link" id="gp-cover-link">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                  <span>Cambiar portada</span>
+                </button>
+              </div>
+              <div class="gp-meta" id="gp-meta"></div>
+            </div>
           </div>
-          <h2 class="detail-title" id="detail-title"></h2>
-          <div class="detail-badges">
-            <span class="detail-platform" id="detail-platform"></span>
-            <span class="detail-source" id="detail-source"></span>
+
+          <div class="gp-section" id="gp-shots-section">
+            <div class="gp-section-title">Capturas de pantalla</div>
+            <div class="gp-shots" id="gp-shots"></div>
           </div>
-          <button class="btn-play" id="detail-play">
-            <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
-            <span class="btn-play-label">Jugar</span>
-            <span class="btn-play-spinner"></span>
-          </button>
-          <div class="detail-meta" id="detail-meta"></div>
-          <div class="detail-section">
-            <div class="detail-section-title">Descripción</div>
-            <div class="detail-desc" id="detail-desc"></div>
-          </div>
-          <div class="detail-links">
-            <button class="detail-link" data-dlink="folder">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              Abrir ubicación
-            </button>
-            <button class="detail-link" data-dlink="cover">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-              Editar portada
-            </button>
+
+          <div class="gp-section">
+            <div class="gp-section-title">Descripción</div>
+            <div class="gp-desc" id="gp-desc"></div>
           </div>
         </div>
-      </aside>
+      </section>
     </div>
   </div>
 
@@ -511,6 +529,15 @@
 
   <!-- ═══════════ TOASTS ═══════════ -->
   <div id="toast-container"></div>
+
+  <!-- ═══════════ CAPTURA PREVIEW ═══════════ -->
+  <div id="shot-view" class="hidden">
+    <div class="shot-backdrop" id="shot-close"></div>
+    <div class="shot-wrap">
+      <img id="shot-img" alt="" draggable="false">
+      <span class="shot-hint">Esc para cerrar</span>
+    </div>
+  </div>
 
   <!-- ═══════════ LAUNCH OVERLAY ═══════════ -->
   <div id="launch-overlay" aria-hidden="true">
