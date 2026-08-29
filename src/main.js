@@ -14,6 +14,16 @@ const I18N = require('./i18n/dict');
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
+// En desarrollo el +Electron+ escribe en %APPDATA%\Electron por defecto; lo
+// fijamos a GameVault para que dev y la app instalada compartan sus datos.
+if (!app.isPackaged) {
+  try {
+    app.setPath('userData', path.join(app.getPath('appData'), 'GameVault'));
+  } catch {
+    // ignore
+  }
+}
+
 const SCAN_INTERVAL = 90 * 1000;
 
 let mainWindow = null;
@@ -544,6 +554,9 @@ function startPeriodicRescan() {
 /* ─────────────────────────── INFO (caché + prefetch) ─────────────────────────── */
 
 const INFO_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 días
+// Coincide con game-info.js: las fichas cacheadas sin esta versión se re-descargan
+// una vez (p. ej. las que se crearon antes de existir trailers/plataformas).
+const INFO_SCHEMA_VERSION = 2;
 
 // Comparte la petición de info por juego (evita duplicar fetch si el prefetch ya
 // está descargándolo) y la persiste para que la siguiente apertura sea instantánea.
@@ -568,18 +581,34 @@ function isCacheFresh(id, game) {
   if (!c) return false;
   if (Date.now() - c.savedAt >= INFO_CACHE_TTL) return false;
   if (c.name && game.name && c.name !== game.name) return false;
+  if (c.info && c.info.version !== INFO_SCHEMA_VERSION) return false;
   return true;
 }
 
 // Precalienta las fichas en segundo plano (3 en paralelo como mucho; el throttle
 // interno de las fuentes ya espacia las peticiones para no tocar rate-limits).
+const prewarmThinTries = new Map();
+function isThinWikiCache(c) {
+  return !!(c && c.info && c.info.source === 'wikipedia' && !(c.info.developers && c.info.developers.length) && !(c.info.publishers && c.info.publishers.length));
+}
 function prewarmGameInfo() {
   const games = gameStore.getGames();
   let i = 0;
   const worker = async () => {
     while (i < games.length) {
       const g = games[i++];
-      if (!g || isCacheFresh(g.id, g)) continue;
+      if (!g) continue;
+      const c = gameStore.getInfoCache(g.id);
+      const versionOk = !!(c && c.info && c.info.version === INFO_SCHEMA_VERSION);
+      const ttlOk = c && Date.now() - c.savedAt < INFO_CACHE_TTL;
+      if (c && ttlOk && versionOk) {
+        // Caché fresca y con el esquema actual: solo se re-descarga si quedó
+        // "delgada" (rate-limit de Wikidata) y hace tiempo de la última tentativa.
+        if (!isThinWikiCache(c)) continue;
+        const last = prewarmThinTries.get(g.id) || 0;
+        if (Date.now() - last < 8 * 60 * 1000) continue;
+        prewarmThinTries.set(g.id, Date.now());
+      }
       try {
         await getOrFetchInfo(g.id, g);
       } catch {
@@ -587,7 +616,7 @@ function prewarmGameInfo() {
       }
     }
   };
-  for (let w = 0; w < 3; w++) worker();
+  for (let w = 0; w < 2; w++) worker();
 }
 
 /* ─────────────────────────── IPC ─────────────────────────── */
@@ -909,9 +938,19 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-game-info', async (event, game) => {
-    if (!game) return null;
+    if (!game || !game.id) return null;
     try {
-      if (isCacheFresh(game.id, game)) return gameStore.getInfoCache(game.id).info;
+      if (isCacheFresh(game.id, game)) {
+        const c = gameStore.getInfoCache(game.id);
+        // Auto-curación: si la ficha de fuente Wikipedia está "delgada" (sin
+        // desarrollador/plataformas porque el enriquecimiento de Wikidata se
+        // topó con un rate-limit), se re-descarga en segundo plano y la
+        // siguiente apertura ya muestra los datos completos.
+        if (isThinWikiCache(c) && Date.now() - c.savedAt > 5 * 60 * 1000) {
+          getOrFetchInfo(game.id, game).catch(() => {});
+        }
+        return c.info;
+      }
       const info = await getOrFetchInfo(game.id, game);
       // Persiste portada y banner panorámico obtenidos de internet (RAWG,
       // Steam o Wikipedia) para que sobrevivan al siguiente análisis.

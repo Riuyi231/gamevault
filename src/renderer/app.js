@@ -852,6 +852,7 @@
     }
 
     renderShots(info);
+    renderTrailers(info);
     renderDetailMeta(game, info);
   }
 
@@ -881,10 +882,49 @@
     });
   }
 
-  function openShotView(src) {
+  let currentHls = null;
+  function destroyHls() {
+    if (currentHls) {
+      try {
+        currentHls.destroy();
+      } catch {
+        /* ignore */
+      }
+      currentHls = null;
+    }
+  }
+
+  function openShotView(src, isVideo) {
     const view = $('#shot-view');
     const img = $('#shot-img');
-    img.src = src;
+    const video = $('#shot-video');
+    img.style.display = isVideo ? 'none' : '';
+    video.style.display = isVideo ? '' : 'none';
+    if (isVideo) {
+      destroyHls();
+      if (video.src) {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      }
+      if (window.Hls && /\.m3u8($|\?)/.test(src)) {
+        const hls = new window.Hls();
+        currentHls = hls;
+        hls.loadSource(src);
+        hls.attachMedia(video);
+      } else {
+        video.src = src;
+      }
+      video.play().catch(() => {});
+    } else {
+      destroyHls();
+      if (video.src) {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      }
+      img.src = src;
+    }
     view.classList.remove('hidden');
   }
 
@@ -892,8 +932,48 @@
     const view = $('#shot-view');
     if (!view.classList.contains('hidden')) {
       view.classList.add('hidden');
-      $('#shot-img').src = '';
+      destroyHls();
+      const img = $('#shot-img');
+      const video = $('#shot-video');
+      if (video && video.src) {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      }
+      img.src = '';
     }
+  }
+
+  function renderTrailers(info) {
+    const section = $('#gp-videos-section');
+    const wrap = $('#gp-videos');
+    if (!section || !wrap) return;
+    const movs = (info && Array.isArray(info.movies)) ? info.movies.filter((m) => m && m.src) : [];
+    if (!movs.length) {
+      section.classList.add('hidden');
+      wrap.innerHTML = '';
+      return;
+    }
+    section.classList.remove('hidden');
+    wrap.innerHTML = '';
+    movs.forEach((m) => {
+      const el = document.createElement('div');
+      el.className = 'gp-video';
+      el.title = m.name || '';
+      const thumb = document.createElement('img');
+      thumb.src = m.thumbnail || '';
+      thumb.alt = m.name || '';
+      thumb.loading = 'lazy';
+      thumb.draggable = false;
+      thumb.onerror = () => { thumb.style.display = 'none'; };
+      const play = document.createElement('div');
+      play.className = 'gp-video-play';
+      play.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      el.appendChild(thumb);
+      el.appendChild(play);
+      el.onclick = () => openShotView(m.src, true);
+      wrap.appendChild(el);
+    });
   }
 
   function renderDetailMeta(game, info) {
@@ -907,6 +987,13 @@
     if (game && game.playtimeMs > 0) stats.push(stat(T('meta.played'), formatPlaytime(game.playtimeMs)));
     if (info && info.developers && info.developers.length) stats.push(stat(T('meta.devs'), esc(info.developers.slice(0, 3).join(', '))));
     if (info && info.publishers && info.publishers.length) stats.push(stat(T('meta.pubs'), esc(info.publishers.slice(0, 2).join(', '))));
+    if (info && info.isFree) {
+      stats.push(stat(T('meta.price'), T('meta.free')));
+    } else if (info && info.price && typeof info.price.final === 'number') {
+      const cur = { USD: '$', EUR: '€', GBP: '£', MXN: '$', ARS: '$', BRL: 'R$', CLP: '$', COP: '$' }[info.price.currency];
+      stats.push(stat(T('meta.price'), esc(`${cur || (info.price.currency + ' ')}${info.price.final.toFixed(2)}`)));
+    }
+    if (info && info.platforms && info.platforms.length) stats.push(stat(T('meta.platforms'), esc(info.platforms.slice(0, 4).join(', '))));
 
     let genresHtml = '';
     if (info && info.genres && info.genres.length) {

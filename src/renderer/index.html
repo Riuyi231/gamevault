@@ -315,6 +315,11 @@
             <div class="gp-shots" id="gp-shots"></div>
           </div>
 
+          <div class="gp-section" id="gp-videos-section">
+            <div class="gp-section-title" data-i18n="gp.videosTitle">Vídeos</div>
+            <div class="gp-shots" id="gp-videos"></div>
+          </div>
+
           <div class="gp-section">
             <div class="gp-section-title" data-i18n="gp.descTitle">Descripción</div>
             <div class="gp-desc" id="gp-desc"></div>
@@ -652,6 +657,7 @@
     <div class="shot-backdrop" id="shot-close"></div>
     <div class="shot-wrap">
       <img id="shot-img" alt="" draggable="false">
+      <video id="shot-video" controls playsinline autoplay></video>
       <span class="shot-hint" data-i18n="shot.hint">Esc para cerrar</span>
     </div>
   </div>
@@ -733,6 +739,7 @@
   </div>
 
   <script src="../i18n/dict.js"></script>
+  <script src="vendor/hls.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

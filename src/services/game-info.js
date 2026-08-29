@@ -50,6 +50,56 @@ function httpGetJson(url, timeoutMs = 10000, _attempt = 1) {
   });
 }
 
+// Wikidata limita mucho más que Wikipedia/Steam: cola propia con mayor
+// separación y más reintentos para no obtener 429 en ráfaga.
+const WD_NET = { last: 0, gap: 900, minRetry: 1000 };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Versión del esquema de "info". Si sube, las fichas cacheadas con una versión
+// anterior se re-descargan (p. ej. al añadir trailers/plataformas/personas).
+const INFO_SCHEMA_VERSION = 2;
+const stampInfo = (i) => {
+  if (i && typeof i === 'object' && !i.version) i.version = INFO_SCHEMA_VERSION;
+  return i;
+};
+function wikidataGet(url, timeoutMs = 10000, _attempt = 1) {
+  return new Promise((resolve) => {
+    const wait = Math.max(0, WD_NET.last + WD_NET.gap - Date.now());
+    const go = () => {
+      WD_NET.last = Date.now();
+      const req = https.get(
+        url,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 GameVault/1.0',
+            Accept: 'application/json'
+          },
+          timeout: timeoutMs
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (c) => (data += c));
+          res.on('end', () => {
+            if (res.statusCode === 429 && _attempt < 4) {
+              setTimeout(() => {
+                wikidataGet(url, timeoutMs, _attempt + 1).then(resolve);
+              }, WD_NET.minRetry * _attempt);
+              return;
+            }
+            resolve({ status: res.statusCode, body: data });
+          });
+        }
+      );
+      req.on('error', () => resolve({ status: 0, body: '' }));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ status: 0, body: '' });
+      });
+    };
+    setTimeout(go, wait);
+  });
+}
+
 function stripHtml(html) {
   if (!html) return '';
   return String(html)
@@ -255,6 +305,7 @@ class GameInfoService {
         const extract = String(d.extract || '').trim();
         const firstSentence = extract.split(/(?<=[.!?])\s/)[0] || extract;
         return {
+          qid: d.wikibase_item || '',
           wikiTitle: d.title || title,
           name: d.title || name,
           shortDescription: firstSentence.slice(0, 320),
@@ -511,6 +562,11 @@ class GameInfoService {
         categories: Array.isArray(d.categories)
           ? d.categories.map((c) => c.description).filter(Boolean)
           : [],
+        platforms: d.platforms
+          ? Object.keys(d.platforms)
+              .filter((p) => d.platforms[p] === true)
+              .map((p) => (p === 'linux' ? 'Linux' : p === 'mac' ? 'macOS' : 'Windows'))
+          : [],
         releaseDate: d.release_date ? d.release_date.date : '',
         comingSoon: d.release_date ? !!d.release_date.coming_soon : false,
         price: d.price_overview
@@ -524,13 +580,32 @@ class GameInfoService {
         type: d.type,
         metascore: d.metacritic ? d.metacritic.score : null,
         screenshot: d.screenshots && d.screenshots[0] ? d.screenshots[0].path_full : '',
-        banner: d.screenshots && d.screenshots[0] ? d.screenshots[0].path_full : (d.header_image || ''),
         header: d.header_image || '',
         coverUrl: d.header_image || '',
         screenshots: Array.isArray(d.screenshots)
           ? d.screenshots.map((s) => s && (s.path_full || s.path_thumbnail)).filter(Boolean)
           : [],
-        banner: d.header_image || '',
+        // Trailers reales de la tienda para mostrarlos en la ficha. Steam hoy los
+        // entrega en streaming (hls_h264/dash_h264 son la URL maestra .m3u8/.mpd);
+        // algunos títulos aún traen mp4/webm en {{480,max}}.
+        movies: Array.isArray(d.movies)
+          ? d.movies
+              .map((m) => {
+                const pick = (o) => {
+                  if (!o) return '';
+                  if (typeof o === 'string') return o;
+                  return o.default || o['1080'] || o['720'] || o['480'] || o.max || o['360'] || '';
+                };
+                return {
+                  name: (m && m.name) || '',
+                  thumbnail: (m && m.thumbnail) || '',
+                  src: pick(m.mp4) || pick(m.webm) || pick(m.hls_h264) || pick(m.dash_h264) || pick(m.dash_av1) || ''
+                };
+              })
+              .filter((m) => m.src)
+          : [],
+        website: d.website || '',
+        banner: (d.header_image || (d.screenshots && d.screenshots[0] ? d.screenshots[0].path_full : '')),
         source: 'steam'
       };
       this.cache.set(cacheKey, info);
@@ -538,6 +613,135 @@ class GameInfoService {
     } catch {
       return null;
     }
+  }
+
+  /* ── Wikidata (sin clave): hechos estructurados reales (desarrollador, editor,
+        géneros, plataformas, fecha de lanzamiento, metascore) para juegos que no
+        están en Steam, en lugar de quedarse solo con el extracto de Wikipedia ── */
+
+  async _wikidataQid(title, lang) {
+    if (!title || !lang) return null;
+    try {
+      const { status, body } = await httpGetJson(
+        `https://${lang}.wikipedia.org/w/api.php?action=query&prop=pageprops&ppprop=wikibase_item&format=json&origin=*` +
+          `&titles=${encodeURIComponent(String(title).replace(/ /g, '_'))}`,
+        7000
+      );
+      if (status !== 200) return null;
+      const data = JSON.parse(body);
+      const pages = data.query && data.query.pages ? Object.values(data.query.pages) : [];
+      return (pages[0] && pages[0].pageprops && pages[0].pageprops.wikibase_item) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async _wikidataClaims(qid) {
+    if (!qid) return null;
+    try {
+      const { status, body } = await wikidataGet(
+        `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(qid)}` +
+          `&props=claims&format=json&origin=*`,
+        9000
+      );
+      if (status !== 200) return null;
+      const d = JSON.parse(body);
+      const e = d.entities && d.entities[qid];
+      return (e && e.claims) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async _wikidataLabels(ids) {
+    if (!ids || ids.length === 0) return {};
+    try {
+      const { status, body } = await wikidataGet(
+        `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${ids.map(encodeURIComponent).join('|')}` +
+          `&props=labels&languages=es|en|zh|ja|ko&languagefallback=1&format=json&origin=*`,
+        9000
+      );
+      if (status !== 200) return {};
+      const d = JSON.parse(body);
+      const out = {};
+      for (const id of ids) {
+        const e = d.entities && d.entities[id];
+        const l = e && e.labels && (e.labels.es || e.labels.en || e.labels.zh || e.labels.ja || e.labels.ko);
+        if (l && l.value) out[id] = l.value;
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  async _wikidataEnrich(item) {
+    if (!item) return item;
+    // El QID viene ya en la respuesta del summary (d.wikibase_item); si falta,
+    // se consulta pageprops en es.wikipedia. Con reintentos: Wikidata y Wikipedia
+    // limitan en ráfaga y una sola pasada puede quedarse a medias.
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      let qid = null;
+      try {
+        qid = item.qid || (await this._wikidataQid(item.wikiTitle || item.name, this._rawgLang()));
+      } catch {
+        qid = null;
+      }
+      if (!qid) {
+        if (attempt === 1) await sleep(1500);
+        continue;
+      }
+      let claims = null;
+      try {
+        claims = await this._wikidataClaims(qid);
+      } catch {
+        claims = null;
+      }
+      if (!claims) {
+        if (attempt === 1) await sleep(1500);
+        continue;
+      }
+
+      const itemIds = (pid) =>
+        ((claims[pid] || [])
+          .map((c) => c.mainsnak && c.mainsnak.datavalue && c.mainsnak.datavalue.value)
+          .filter((v) => v && typeof v === 'object' && v.id)
+          .map((v) => v.id));
+
+      const devs = itemIds('P178'); // desarrollador
+      const pubs = itemIds('P123'); // editor
+      const genres = itemIds('P136'); // género
+      const platforms = itemIds('P750'); // plataforma
+      const wanted = new Set([...devs, ...pubs, ...genres, ...platforms]);
+      let labels = {};
+      for (let li = 0; li < 3 && wanted.size > 0 && Object.keys(labels).length < wanted.size; li++) {
+        if (li > 0) await sleep(1600 * li);
+        try {
+          labels = { ...labels, ...(await this._wikidataLabels(Array.from(wanted))) };
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const dates = ((claims['P577'] || []) // fecha de publicación
+        .map((c) => c.mainsnak && c.mainsnak.datavalue && c.mainsnak.datavalue.value)
+        .filter((v) => v && v.time)
+        .map((v) => String(v.time).replace(/^\+/, '').slice(0, 10))
+        .filter(Boolean)
+        .sort());
+      const metas = ((claims['P444'] || []) // metascore
+        .map((c) => c.mainsnak && c.mainsnak.datavalue && c.mainsnak.datavalue.value)
+        .filter((v) => v != null && typeof v === 'number'));
+
+      if (devs.length && !item.developers.length) item.developers = devs.map((id) => labels[id] || id);
+      if (pubs.length && !item.publishers.length) item.publishers = pubs.map((id) => labels[id] || id);
+      if (genres.length && (!item.genres || item.genres.length <= 1)) item.genres = genres.map((id) => labels[id] || id);
+      if (platforms.length && (!item.platforms || item.platforms.length === 0)) item.platforms = platforms.map((id) => labels[id] || id);
+      if (dates.length && !item.releaseDate) item.releaseDate = dates[0];
+      if (metas.length && item.metascore == null) item.metascore = metas[0];
+      break;
+    }
+    return item;
   }
 
   async fetchForGame(game) {
@@ -550,8 +754,8 @@ class GameInfoService {
     if (rawgMatch) {
       const rawgInfo = await this._rawgDetails(rawgMatch.slug);
       if (rawgInfo) {
-        this.cache.set(cacheKey, rawgInfo);
-        return rawgInfo;
+        this.cache.set(cacheKey, stampInfo(rawgInfo));
+        return stampInfo(rawgInfo);
       }
     }
 
@@ -560,42 +764,36 @@ class GameInfoService {
       const info = await this._fetchSteamAppDetails(game.appId);
       if (info) {
         const final = await this._wikiLocalized(info, game.name);
-        this.cache.set(cacheKey, final);
-        return final;
+        this.cache.set(cacheKey, stampInfo(final));
+        return stampInfo(final);
       }
     }
 
-    // 3) Steam by name (fallback, solo con coincidencia fuerte)
+    // 3) Steam by name (fallback): cualquier juego puede tener ficha de tienda
+    //    aunque se escaneó sin appid (gotas de Epic/Ubisoft, carpetas propias,
+    //    etc.). Solo se usa con coincidencia muy fuerte; si no, se cae a 4).
     const appid = await this._findSteamIdByName(game.name);
     if (appid) {
       const info = await this._fetchSteamAppDetails(appid);
-      if (info) {
-        if (this._scoreMatch(game.name, info.name) >= 100) {
-          const final = await this._wikiLocalized(info, game.name);
-          this.cache.set(cacheKey, final);
-          return final;
-        }
-        const mismatch = {
-          name: game.name,
-          discoveredName: info.name,
-          shortDescription: '',
-          detailedDescription: '',
-          about: ''
-        };
-        this.cache.set(cacheKey, mismatch);
-        return mismatch;
+      if (info && this._scoreMatch(game.name, info.name) >= 100) {
+        const final = await this._wikiLocalized(info, game.name);
+        this.cache.set(cacheKey, stampInfo(final));
+        return stampInfo(final);
       }
     }
 
-    // 4) Wikipedia (sin clave): datos localizados para juegos de cualquier
-    //    plataforma (tiendas propias, consolas, etc.) aunque no estén en Steam.
+    // 4) Wikipedia (sin clave): datos localizados + hechos estructurados reales
+    //    de Wikidata (desarrollador, editor, géneros, plataformas, fecha de
+    //    lanzamiento, metascore) para juegos de cualquier plataforma (tiendas
+    //    propias, consolas, etc.) aunque no estén en Steam.
     const wikiInfo = await this._wikiSummary(game.name);
     if (wikiInfo) {
-      this.cache.set(cacheKey, wikiInfo);
-      return wikiInfo;
+      const enriched = stampInfo(await this._wikidataEnrich(wikiInfo));
+      this.cache.set(cacheKey, enriched);
+      return enriched;
     }
 
-    const fallback = { name: game.name, shortDescription: '', detailedDescription: '', about: '' };
+    const fallback = stampInfo({ name: game.name, shortDescription: '', detailedDescription: '', about: '' });
     this.cache.set(cacheKey, fallback);
     return fallback;
   }
