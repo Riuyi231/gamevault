@@ -382,6 +382,15 @@ function createWindow() {
 
   mainWindow.webContents.on('render-process-gone', (event, details) => {
     logError('Renderer process gone:', details.reason, details.exitCode);
+    // Si el renderer se cae por un crash de GPU o un fallo de rendering,
+    // recargamos en vez de dejar la ventana congelada esperando a que el
+    // usuario cambie de ventana.
+    recoverFromRenderingFailure();
+  });
+
+  mainWindow.webContents.on('gpu-process-crashed', (event) => {
+    logError('GPU process crashed');
+    recoverFromRenderingFailure();
   });
 
   mainWindow.webContents.on('console-message', (event, details) => {
@@ -391,6 +400,23 @@ function createWindow() {
       logError(`[renderer:${level}] ${message}`);
     }
   });
+}
+
+// La ventana puede quedarse "frita" si el proceso GPU crashea o el renderer se
+// cae a mitad de un repintado pesado (p. ej. al abrir una captura grande). Se
+// recarga el contenido con un enfriamiento para no reiniciar en bucle.
+let lastRenderingRecovery = 0;
+function recoverFromRenderingFailure() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const now = Date.now();
+  if (now - lastRenderingRecovery < 10000) return;
+  lastRenderingRecovery = now;
+  log('Recuperando congelacion de rendering: recargando la ventana...');
+  try {
+    mainWindow.webContents.reload();
+  } catch {
+    // ignore
+  }
 }
 
 function sendToRenderer(channel, payload) {

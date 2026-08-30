@@ -874,6 +874,7 @@
       img.src = src;
       img.alt = '';
       img.loading = 'lazy';
+      img.decoding = 'async';
       img.draggable = false;
       img.onerror = () => el.classList.add('gp-shot-missing');
       img.onclick = () => openShotView(src);
@@ -924,6 +925,7 @@
         video.load();
       }
       img.src = src;
+      img.decoding = 'async';
     }
     view.classList.remove('hidden');
   }
