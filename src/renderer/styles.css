@@ -2645,6 +2645,14 @@ input[type='range']::-webkit-slider-thumb {
   animation: heroTitleIn 0.5s 0.24s var(--ease-spring) backwards;
 }
 
+/* Los contenedores con display:flex de .arcade-* anulan el atributo HTML
+   hidden del navegador; sin esto ambas vistas se dibujan superpuestas. */
+#arcade-home[hidden],
+#arcade-game[hidden],
+#arcade-media[hidden] {
+  display: none !important;
+}
+
 /* ═══════════ ARCADE HOME (Bento) ═══════════ */
 .arcade-home {
   position: relative;
