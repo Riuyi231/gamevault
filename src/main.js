@@ -467,6 +467,8 @@ function syncServiceKeys(settings) {
   if (artworkService && artworkService.setSgdbKey) artworkService.setSgdbKey(s.sgdbKey);
   if (gameInfoService && gameInfoService.setIgdbKeys) gameInfoService.setIgdbKeys(s.igdbClientId, s.igdbClientSecret);
   if (artworkService && artworkService.setIgdbKeys) artworkService.setIgdbKeys(s.igdbClientId, s.igdbClientSecret);
+  if (gameInfoService && gameInfoService.setIgdbProxy) gameInfoService.setIgdbProxy(s.igdbProxyUrl);
+  if (artworkService && artworkService.setIgdbProxy) artworkService.setIgdbProxy(s.igdbProxyUrl);
   if (gameInfoService && gameInfoService.setTgdbKey) gameInfoService.setTgdbKey(s.tgdbKey);
   if (artworkService && artworkService.setTgdbKey) artworkService.setTgdbKey(s.tgdbKey);
   if (gameDetector && gameDetector.setLocale) gameDetector.setLocale(s.locale || I18N.DEFAULT_LOCALE);
@@ -772,7 +774,7 @@ function setupIPC() {
     return {
       hasRawgKey: !!(artworkService && artworkService.rawgKey),
       hasSgdb: !!(artworkService && artworkService.sgdbKey),
-      hasIgdb: !!(artworkService && artworkService.igdbId && artworkService.igdbSecret),
+      hasIgdb: !!(artworkService && (artworkService.igdbId || artworkService.igdbProxy)),
       hasTgdb: !!(artworkService && artworkService.tgdbKey)
     };
   });

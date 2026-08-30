@@ -127,6 +127,7 @@ class GameInfoService {
     this.rawgKey = '';
     this.igdbId = '';
     this.igdbSecret = '';
+    this.igdbProxy = '';
     this.tgdbKey = '';
     this.igdbToken = null;
     this.igdbTokenExp = 0;
@@ -152,11 +153,17 @@ class GameInfoService {
 
   // IGDB (Twitch): requiere Client ID + Client Secret; el token OAuth se obtiene
   // solo cuando hace falta (client_credentials) y se cachea ~60 días.
+  // Si se define igdbProxy, todas las llamadas IGDB pasan por el servidor
+  // central (las claves viven en el servidor, no en la app).
   setIgdbKeys(clientId, clientSecret) {
     this.igdbId = String(clientId || '').trim();
     this.igdbSecret = String(clientSecret || '').trim();
     this.igdbToken = null;
     this.igdbTokenExp = 0;
+  }
+
+  setIgdbProxy(url) {
+    this.igdbProxy = String(url || '').trim().replace(/\/+$/, '');
   }
 
   setTgdbKey(key) {
@@ -203,25 +210,25 @@ class GameInfoService {
     }
   }
 
-  async _igdbPost(endpoint, payload) {
-    const token = await this._igdbToken();
-    if (!token) return null;
+  _postRaw(url, payload, headers) {
     return new Promise((resolve) => {
       const wait = Math.max(0, NET.last + NET.gap - Date.now());
       const go = () => {
         NET.last = Date.now();
-        const req = https.request(
-          `https://api.igdb.com${endpoint}`,
+        const mod = url.startsWith('https') ? https : http;
+        const req = mod.request(
+          url,
           {
             method: 'POST',
-            headers: {
-              'Client-ID': this.igdbId,
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/json',
-              'Content-Type': 'text/plain',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 GameVault/1.0'
-            },
-            timeout: 10000
+            headers: Object.assign(
+              {
+                Accept: 'application/json',
+                'Content-Type': 'text/plain',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 GameVault/1.0'
+              },
+              headers
+            ),
+            timeout: 12000
           },
           (res) => {
             let data = '';
@@ -241,8 +248,23 @@ class GameInfoService {
     });
   }
 
+  async _igdbPost(endpoint, payload) {
+    if (this.igdbProxy) {
+      // Modo nube: el proxy central del usuario guarda las claves IGDB.
+      const out = await this._postRaw(this.igdbProxy + '/igdb', payload);
+      if (!out) return null;
+      return { status: out.status, body: out.body };
+    }
+    const token = await this._igdbToken();
+    if (!token) return null;
+    return this._postRaw(`https://api.igdb.com${endpoint}`, payload, {
+      'Client-ID': this.igdbId,
+      Authorization: `Bearer ${token}`
+    });
+  }
+
   async _igdbSearch(name) {
-    if (!name || !this.igdbId || !this.igdbSecret) return null;
+    if (!name || (!this.igdbId && !this.igdbProxy)) return null;
     const cacheKey = `igdb:${String(name).toLowerCase().trim()}`;
     if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
     try {
@@ -984,10 +1006,11 @@ class GameInfoService {
     const cacheKey = game.id;
     if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
 
-    // 1) IGDB (si se configuró Client ID/Secret de Twitch): multi-plataforma y
-    //    multitienda (lo mismo que cubría RAWG pero sin aprobación). Sin claves
-    //    se omite silenciosamente y se sigue con el resto del stack.
-    if (this.igdbId && this.igdbSecret) {
+    // 1) IGDB (si se configuró Client ID/Secret de Twitch o un servidor proxy
+    //    central): multi-plataforma y multitienda (lo mismo que cubría RAWG pero
+    //    sin aprobación). Sin claves ni proxy se omite silenciosamente y se
+    //    sigue con el resto del stack.
+    if ((this.igdbId && this.igdbSecret) || this.igdbProxy) {
       const igdbInfo = await this._igdbSearch(game.name);
       if (igdbInfo) {
         const final = await this._wikiLocalized(igdbInfo, game.name);

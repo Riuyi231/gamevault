@@ -1,0 +1,13 @@
+{
+  "name": "gamevault-proxy",
+  "version": "1.12.0",
+  "private": true,
+  "description": "Proxy central de GameVault: IGDB + TheGamesDB + SteamGridDB con una sola clave compartida.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

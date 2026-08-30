@@ -89,6 +89,7 @@ class ArtworkService {
     this.sgdbKey = '';
     this.igdbId = '';
     this.igdbSecret = '';
+    this.igdbProxy = '';
     this.tgdbKey = '';
     this.igdbToken = null;
     this.igdbTokenExp = 0;
@@ -112,6 +113,10 @@ class ArtworkService {
     this.igdbSecret = String(clientSecret || '').trim();
     this.igdbToken = null;
     this.igdbTokenExp = 0;
+  }
+
+  setIgdbProxy(url) {
+    this.igdbProxy = String(url || '').trim().replace(/\/+$/, '');
   }
 
   setTgdbKey(key) {
@@ -182,7 +187,8 @@ class ArtworkService {
       const wait = Math.max(0, net.last + net.gap - Date.now());
       const go = () => {
         net.last = Date.now();
-        const req = https.request(
+        const mod = url.startsWith('https') ? https : http;
+        const req = mod.request(
           url,
           {
             method: 'POST',
@@ -673,22 +679,30 @@ class ArtworkService {
     }
   }
 
+  async _igdbPost(payload) {
+    if (this.igdbProxy) {
+      // Modo nube: el proxy central del usuario guarda las claves IGDB.
+      return this._httpPostJson(this.igdbProxy + '/igdb', payload, null, 12000);
+    }
+    const token = await this._igdbToken();
+    if (!token) return null;
+    return this._httpPostJson('https://api.igdb.com/v4/games', payload, {
+      'Client-ID': this.igdbId,
+      Authorization: `Bearer ${token}`
+    }, 12000);
+  }
+
   async _searchIgdb(name) {
     const results = [];
-    if (!name || !this.igdbId || !this.igdbSecret) return results;
+    if (!name || (!this.igdbId && !this.igdbProxy)) return results;
     try {
-      const token = await this._igdbToken();
-      if (!token) return results;
       const esc = String(name).replace(/"/g, '\\"');
-      const url = 'https://api.igdb.com/v4/games';
       const payload =
         `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,platforms.name,rating; ` +
         `search "${esc}"; where category = 0; limit 8;`;
-      const { status, body } = await this._httpPostJson(url, payload, {
-        'Client-ID': this.igdbId,
-        Authorization: `Bearer ${token}`
-      }, 12000);
-      if (status !== 200) return results;
+      const res = await this._igdbPost(payload);
+      if (!res || res.status !== 200) return results;
+      const { body } = res;
       const list = JSON.parse(body);
       if (!Array.isArray(list)) return results;
       const scored = list

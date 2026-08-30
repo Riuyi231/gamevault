@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   theme: 'dark',
   rawgKey: '',
   sgdbKey: '',
+  igdbProxyUrl: '',
   locale: 'es'
 };
 

@@ -2670,6 +2670,9 @@
   $('#set-igdb-secret').addEventListener('change', (e) => {
     saveSettings({ igdbClientSecret: e.target.value.trim() });
   });
+  $('#set-igdb-proxy').addEventListener('change', (e) => {
+    saveSettings({ igdbProxyUrl: e.target.value.trim() });
+  });
   $('#set-tgdb-key').addEventListener('change', (e) => {
     saveSettings({ tgdbKey: e.target.value.trim() });
   });
@@ -2987,6 +2990,8 @@
       if (igdbIdInput) igdbIdInput.value = settings.igdbClientId || '';
       const igdbSecretInput = $('#set-igdb-secret');
       if (igdbSecretInput) igdbSecretInput.value = settings.igdbClientSecret || '';
+      const igdbProxyInput = $('#set-igdb-proxy');
+      if (igdbProxyInput) igdbProxyInput.value = settings.igdbProxyUrl || '';
       const tgdbInput = $('#set-tgdb-key');
       if (tgdbInput) tgdbInput.value = settings.tgdbKey || '';
     } catch (err) {
