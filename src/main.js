@@ -465,6 +465,10 @@ function syncServiceKeys(settings) {
   if (gameInfoService && gameInfoService.setRawgKey) gameInfoService.setRawgKey(s.rawgKey);
   if (artworkService && artworkService.setRawgKey) artworkService.setRawgKey(s.rawgKey);
   if (artworkService && artworkService.setSgdbKey) artworkService.setSgdbKey(s.sgdbKey);
+  if (gameInfoService && gameInfoService.setIgdbKeys) gameInfoService.setIgdbKeys(s.igdbClientId, s.igdbClientSecret);
+  if (artworkService && artworkService.setIgdbKeys) artworkService.setIgdbKeys(s.igdbClientId, s.igdbClientSecret);
+  if (gameInfoService && gameInfoService.setTgdbKey) gameInfoService.setTgdbKey(s.tgdbKey);
+  if (artworkService && artworkService.setTgdbKey) artworkService.setTgdbKey(s.tgdbKey);
   if (gameDetector && gameDetector.setLocale) gameDetector.setLocale(s.locale || I18N.DEFAULT_LOCALE);
   if (gameInfoService && gameInfoService.setLocale) gameInfoService.setLocale(s.locale || I18N.DEFAULT_LOCALE);
   if (updaterService && updaterService.setLocale) updaterService.setLocale(s.locale || I18N.DEFAULT_LOCALE);
@@ -766,7 +770,10 @@ function setupIPC() {
 
   ipcMain.handle('get-artwork-config', async () => {
     return {
-      hasRawgKey: !!(artworkService && artworkService.rawgKey)
+      hasRawgKey: !!(artworkService && artworkService.rawgKey),
+      hasSgdb: !!(artworkService && artworkService.sgdbKey),
+      hasIgdb: !!(artworkService && artworkService.igdbId && artworkService.igdbSecret),
+      hasTgdb: !!(artworkService && artworkService.tgdbKey)
     };
   });
 

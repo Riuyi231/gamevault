@@ -125,6 +125,11 @@ class GameInfoService {
     this.cache = new Map();
     this.steamIdCache = new Map();
     this.rawgKey = '';
+    this.igdbId = '';
+    this.igdbSecret = '';
+    this.tgdbKey = '';
+    this.igdbToken = null;
+    this.igdbTokenExp = 0;
     this.setLocale();
   }
 
@@ -143,6 +148,165 @@ class GameInfoService {
 
   setRawgKey(key) {
     this.rawgKey = String(key || '').trim();
+  }
+
+  // IGDB (Twitch): requiere Client ID + Client Secret; el token OAuth se obtiene
+  // solo cuando hace falta (client_credentials) y se cachea ~60 días.
+  setIgdbKeys(clientId, clientSecret) {
+    this.igdbId = String(clientId || '').trim();
+    this.igdbSecret = String(clientSecret || '').trim();
+    this.igdbToken = null;
+    this.igdbTokenExp = 0;
+  }
+
+  setTgdbKey(key) {
+    this.tgdbKey = String(key || '').trim();
+  }
+
+  /* ── IGDB (multi-platform, requiere credenciales de Twitch) ── */
+  async _igdbToken() {
+    if (this.igdbToken && Date.now() < this.igdbTokenExp) return this.igdbToken;
+    if (!this.igdbId || !this.igdbSecret) return null;
+    try {
+      const payload =
+        `client_id=${encodeURIComponent(this.igdbId)}&client_secret=${encodeURIComponent(this.igdbSecret)}&grant_type=client_credentials`;
+      const { status, body } = await new Promise((resolve) => {
+        const req = https.request(
+          'https://id.twitch.tv/oauth2/token',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            timeout: 9000
+          },
+          (res) => {
+            let data = '';
+            res.on('data', (c) => (data += c));
+            res.on('end', () => resolve({ status: res.statusCode, body: data }));
+          }
+        );
+        req.on('error', () => resolve({ status: 0, body: '' }));
+        req.on('timeout', () => {
+          req.destroy();
+          resolve({ status: 0, body: '' });
+        });
+        req.write(payload);
+        req.end();
+      });
+      if (status !== 200) return null;
+      const d = JSON.parse(body);
+      if (!d.access_token) return null;
+      this.igdbToken = d.access_token;
+      this.igdbTokenExp = Date.now() + Math.max(60, ((d.expires_in || 5184000) - 300)) * 1000;
+      return this.igdbToken;
+    } catch {
+      return null;
+    }
+  }
+
+  async _igdbPost(endpoint, payload) {
+    const token = await this._igdbToken();
+    if (!token) return null;
+    return new Promise((resolve) => {
+      const wait = Math.max(0, NET.last + NET.gap - Date.now());
+      const go = () => {
+        NET.last = Date.now();
+        const req = https.request(
+          `https://api.igdb.com${endpoint}`,
+          {
+            method: 'POST',
+            headers: {
+              'Client-ID': this.igdbId,
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+              'Content-Type': 'text/plain',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 GameVault/1.0'
+            },
+            timeout: 10000
+          },
+          (res) => {
+            let data = '';
+            res.on('data', (c) => (data += c));
+            res.on('end', () => resolve({ status: res.statusCode, body: data }));
+          }
+        );
+        req.on('error', () => resolve({ status: 0, body: '' }));
+        req.on('timeout', () => {
+          req.destroy();
+          resolve({ status: 0, body: '' });
+        });
+        req.write(payload);
+        req.end();
+      };
+      setTimeout(go, wait);
+    });
+  }
+
+  async _igdbSearch(name) {
+    if (!name || !this.igdbId || !this.igdbSecret) return null;
+    const cacheKey = `igdb:${String(name).toLowerCase().trim()}`;
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+    try {
+      const esc = String(name).replace(/"/g, '\\"');
+      const { status, body } = await this._igdbPost(
+        '/v4/games',
+        `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,summary,storyline,genres.name,platforms.name,first_release_date,aggregated_rating,rating,rating_count,developers.name,publishers.name; search "${esc}"; where category = 0; limit 8;`
+      );
+      if (status !== 200) return null;
+      const list = JSON.parse(body);
+      if (!Array.isArray(list) || list.length === 0) return null;
+
+      const scoreMatch = (a, b) => {
+        const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const na = norm(a);
+        const nb = norm(b);
+        if (!na || !nb) return 0;
+        if (na === nb) return 200;
+        if (na.length >= 3 && na.includes(nb)) return 100;
+        if (na.length >= 3 && nb.includes(na)) return 100;
+        if (na.startsWith(nb) || nb.startsWith(na)) return 60;
+        return 0;
+      };
+
+      const matches = list
+        .filter((r) => r && r.name)
+        .sort((x, y) => scoreMatch(name, y.name) - scoreMatch(name, x.name));
+      const best = matches.find((r) => scoreMatch(name, r.name) >= 100) || matches[0];
+      if (!best) return null;
+
+      const img = (id, size) => (id ? `https://images.igdb.com/igdb/image/upload/t_${size}/${id}.jpg` : '');
+      const coverId = best.cover && best.cover.image_id;
+      const shots = (best.screenshots || []).map((s) => img(s.image_id, '720p')).filter(Boolean);
+      const arts = (best.artworks || []).map((a) => img(a.image_id, '720p')).filter(Boolean);
+      const release = best.first_release_date ? new Date(best.first_release_date * 1000) : null;
+      const info = {
+        name: best.name,
+        shortDescription: (best.summary || '').split(/\.\s/)[0] + '.' || '',
+        detailedDescription: best.summary || best.storyline || '',
+        about: best.summary || '',
+        developers: Array.isArray(best.developers) ? best.developers.map((d) => d.name).filter(Boolean) : [],
+        publishers: Array.isArray(best.publishers) ? best.publishers.map((d) => d.name).filter(Boolean) : [],
+        genres: Array.isArray(best.genres) ? best.genres.map((g) => g.name).filter(Boolean) : [],
+        categories: Array.isArray(best.genres) ? best.genres.map((g) => g.name).filter(Boolean) : [],
+        releaseDate: release ? `${release.getFullYear()}-${String(release.getMonth() + 1).padStart(2, '0')}-${String(release.getDate()).padStart(2, '0')}` : '',
+        comingSoon: false,
+        price: null,
+        isFree: false,
+        type: 'game',
+        metascore: null,
+        rating: best.aggregated_rating || best.rating || null,
+        screenshot: shots[0] || arts[0] || '',
+        header: shots[0] || arts[0] || '',
+        coverUrl: img(coverId, 'cover_big') || shots[0] || '',
+        banner: arts[0] || shots[0] || '',
+        screenshots: shots.length ? shots : arts,
+        source: 'igdb',
+        platforms: Array.isArray(best.platforms) ? best.platforms.map((p) => p.name).filter(Boolean) : []
+      };
+      this.cache.set(cacheKey, info);
+      return info;
+    } catch {
+      return null;
+    }
   }
 
   /* ── RAWG (multi-platform, localized descriptions) ── */
@@ -749,7 +913,19 @@ class GameInfoService {
     const cacheKey = game.id;
     if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
 
-    // 1) RAWG first: multi-platform + localized (es) descriptions
+    // 1) IGDB (si se configuró Client ID/Secret de Twitch): multi-plataforma y
+    //    multitienda (lo mismo que cubría RAWG pero sin aprobación). Sin claves
+    //    se omite silenciosamente y se sigue con el resto del stack.
+    if (this.igdbId && this.igdbSecret) {
+      const igdbInfo = await this._igdbSearch(game.name);
+      if (igdbInfo) {
+        const final = await this._wikiLocalized(igdbInfo, game.name);
+        this.cache.set(cacheKey, stampInfo(final));
+        return stampInfo(final);
+      }
+    }
+
+    // 2) RAWG (si hay clave): multi-platform + localized (es) descriptions
     const rawgMatch = await this._rawgSearch(game.name);
     if (rawgMatch) {
       const rawgInfo = await this._rawgDetails(rawgMatch.slug);
@@ -759,7 +935,7 @@ class GameInfoService {
       }
     }
 
-    // 2) Steam by appId
+    // 3) Steam by appId
     if (game.appId && /^\d{1,8}$/.test(String(game.appId))) {
       const info = await this._fetchSteamAppDetails(game.appId);
       if (info) {
@@ -769,7 +945,7 @@ class GameInfoService {
       }
     }
 
-    // 3) Steam by name (fallback): cualquier juego puede tener ficha de tienda
+    // 4) Steam by name (fallback): cualquier juego puede tener ficha de tienda
     //    aunque se escaneó sin appid (gotas de Epic/Ubisoft, carpetas propias,
     //    etc.). Solo se usa con coincidencia muy fuerte; si no, se cae a 4).
     const appid = await this._findSteamIdByName(game.name);
@@ -782,7 +958,7 @@ class GameInfoService {
       }
     }
 
-    // 4) Wikipedia (sin clave): datos localizados + hechos estructurados reales
+    // 5) Wikipedia (sin clave): datos localizados + hechos estructurados reales
     //    de Wikidata (desarrollador, editor, géneros, plataformas, fecha de
     //    lanzamiento, metascore) para juegos de cualquier plataforma (tiendas
     //    propias, consolas, etc.) aunque no estén en Steam.

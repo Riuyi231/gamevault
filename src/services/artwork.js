@@ -63,6 +63,17 @@ function normalize(str) {
     .trim();
 }
 
+function scoreMatch(a, b) {
+  const na = String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const nb = String(b || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!na || !nb) return 0;
+  if (na === nb) return 200;
+  if (na.length >= 3 && na.includes(nb)) return 100;
+  if (na.length >= 3 && nb.includes(na)) return 100;
+  if (na.startsWith(nb) || nb.startsWith(na)) return 60;
+  return 0;
+}
+
 class ArtworkService {
   constructor(dataDir) {
     this.coversDir = path.join(dataDir, 'covers');
@@ -76,6 +87,11 @@ class ArtworkService {
     this.defaultSvgPath = path.join(this.coversDir, 'default-cover.svg');
     this.rawgKey = '';
     this.sgdbKey = '';
+    this.igdbId = '';
+    this.igdbSecret = '';
+    this.tgdbKey = '';
+    this.igdbToken = null;
+    this.igdbTokenExp = 0;
     this._ensureDefaultCover();
   }
 
@@ -89,6 +105,17 @@ class ArtworkService {
 
   setSgdbKey(key) {
     this.sgdbKey = String(key || '').trim();
+  }
+
+  setIgdbKeys(clientId, clientSecret) {
+    this.igdbId = String(clientId || '').trim();
+    this.igdbSecret = String(clientSecret || '').trim();
+    this.igdbToken = null;
+    this.igdbTokenExp = 0;
+  }
+
+  setTgdbKey(key) {
+    this.tgdbKey = String(key || '').trim();
   }
 
   _ensureDefaultCover() {
@@ -146,6 +173,42 @@ class ArtworkService {
         req.destroy();
         reject(new Error('Timeout'));
       });
+    });
+  }
+
+  _httpPostJson(url, payload, extraHeaders = {}, timeoutMs = 10000) {
+    return new Promise((resolve, reject) => {
+      const net = ArtworkService._net();
+      const wait = Math.max(0, net.last + net.gap - Date.now());
+      const go = () => {
+        net.last = Date.now();
+        const req = https.request(
+          url,
+          {
+            method: 'POST',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 GameVault/1.0',
+              'Accept': 'application/json',
+              'Content-Type': 'text/plain',
+              ...extraHeaders
+            },
+            timeout: timeoutMs
+          },
+          (res) => {
+            let data = '';
+            res.on('data', (c) => (data += c));
+            res.on('end', () => resolve({ status: res.statusCode, body: data }));
+          }
+        );
+        req.on('error', (err) => reject(err));
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Timeout'));
+        });
+        req.write(payload);
+        req.end();
+      };
+      setTimeout(go, wait);
     });
   }
 
@@ -217,16 +280,21 @@ class ArtworkService {
     }
 
     // Todas las fuentes en paralelo (la cola del servicio ya las espacia);
-    // después se fusionan en el mismo orden que antes (rawg → sgdb → steam → wiki).
-    const [rawgR, steamR, sgdbR, wikiR] = await Promise.allSettled([
+    // después se fusionan en el mismo orden que antes
+    // (rawg → sgdb → igdb → steam → tgdb → wiki).
+    const [rawgR, steamR, sgdbR, igdbR, tgdbR, wikiR] = await Promise.allSettled([
       this._searchRawg(gameName),
       this._searchSteamStore(gameName),
       this._searchSteamGridDB(gameName),
+      this._searchIgdb(gameName),
+      this._searchTheGamesDB(gameName),
       this._searchWikipedia(gameName)
     ]);
     const rawg = (rawgR.status === 'fulfilled' ? rawgR.value : null) || [];
     const steam = (steamR.status === 'fulfilled' ? steamR.value : null) || [];
     const sgdb = (sgdbR.status === 'fulfilled' ? sgdbR.value : null) || [];
+    const igdb = (igdbR.status === 'fulfilled' ? igdbR.value : null) || [];
+    const tgdb = (tgdbR.status === 'fulfilled' ? tgdbR.value : null) || [];
     const wiki = (wikiR.status === 'fulfilled' ? wikiR.value : null) || [];
     const push = (m) => {
       if (m && !results.some((r) => r.url === m.url)) results.push(m);
@@ -234,7 +302,9 @@ class ArtworkService {
 
     for (const m of rawg) push(m);
     if (results.length === 0) for (const m of sgdb) push(m);
+    for (const m of igdb) push(m);
     for (const r of steam) push(r);
+    for (const m of tgdb) push(m);
     if (results.length === 0) for (const m of wiki) push(m);
 
     if (results.length === 0) {
@@ -555,6 +625,147 @@ class ArtworkService {
       }
     } catch {
       // ignore — SteamGridDB may require an API key; gracefully return []
+    }
+    return results;
+  }
+
+  // IGDB (Twitch): token OAuth client_credentials cacheado ~60 días. Sin
+  // credenciales devuelve [] y todo el flujo keyless sigue intacto.
+  async _igdbToken() {
+    if (this.igdbToken && Date.now() < this.igdbTokenExp) return this.igdbToken;
+    if (!this.igdbId || !this.igdbSecret) return null;
+    try {
+      const payload =
+        `client_id=${encodeURIComponent(this.igdbId)}&client_secret=${encodeURIComponent(this.igdbSecret)}&grant_type=client_credentials`;
+      const { status, body } = await new Promise((resolve) => {
+        const req = https.request(
+          'https://id.twitch.tv/oauth2/token',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            timeout: 9000
+          },
+          (res) => {
+            let data = '';
+            res.on('data', (c) => (data += c));
+            res.on('end', () => resolve({ status: res.statusCode, body: data }));
+          }
+        );
+        req.on('error', () => resolve({ status: 0, body: '' }));
+        req.on('timeout', () => {
+          req.destroy();
+          resolve({ status: 0, body: '' });
+        });
+        req.write(payload);
+        req.end();
+      });
+      if (status !== 200) return null;
+      const d = JSON.parse(body);
+      if (!d.access_token) return null;
+      this.igdbToken = d.access_token;
+      this.igdbTokenExp = Date.now() + Math.max(60, ((d.expires_in || 5184000) - 300)) * 1000;
+      return this.igdbToken;
+    } catch {
+      return null;
+    }
+  }
+
+  async _searchIgdb(name) {
+    const results = [];
+    if (!name || !this.igdbId || !this.igdbSecret) return results;
+    try {
+      const token = await this._igdbToken();
+      if (!token) return results;
+      const esc = String(name).replace(/"/g, '\\"');
+      const url = 'https://api.igdb.com/v4/games';
+      const payload =
+        `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,platforms.name,rating; ` +
+        `search "${esc}"; where category = 0; limit 8;`;
+      const { status, body } = await this._httpPostJson(url, payload, {
+        'Client-ID': this.igdbId,
+        Authorization: `Bearer ${token}`
+      }, 12000);
+      if (status !== 200) return results;
+      const list = JSON.parse(body);
+      if (!Array.isArray(list)) return results;
+      const scored = list
+        .filter((g) => g && g.name)
+        .map((g) => ({ g, score: scoreMatch(name, g.name) }))
+        .filter((x) => x.score >= 60)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+      const img = (id, size) => (id ? `https://images.igdb.com/igdb/image/upload/t_${size}/${id}.jpg` : '');
+      for (const { g } of scored) {
+        const label = g.name || name;
+        const cover = img(g.cover && g.cover.image_id, 'cover_big');
+        if (cover && !results.some((r) => r.url === cover)) {
+          results.push({ url: cover, thumb: cover, width: 264, height: 374, source: 'igdb', label, relevance: 100 });
+        }
+        for (const s of g.screenshots || []) {
+          const url2 = img(s.image_id, '720p');
+          if (url2 && !results.some((r) => r.url === url2)) {
+            results.push({ url: url2, thumb: url2, width: 1280, height: 720, source: 'igdb-shot', label, isWide: true });
+          }
+        }
+        for (const a of g.artworks || []) {
+          const url2 = img(a.image_id, '720p');
+          if (url2 && !results.some((r) => r.url === url2)) {
+            results.push({ url: url2, thumb: url2, width: 1280, height: 720, source: 'igdb-art', label, isWide: true });
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return results;
+  }
+
+  // TheGamesDB: información y carátulas de consolas/juegos retro (clave gratis).
+  async _searchTheGamesDB(name) {
+    const results = [];
+    if (!name || !this.tgdbKey) return results;
+    try {
+      const key = encodeURIComponent(this.tgdbKey);
+      const { status, body } = await this._httpGetJson(
+        `https://api.thegamesdb.net/v1/Games/ByGameName?apikey=${key}&name=${encodeURIComponent(name)}&fields=art`,
+        9000
+      );
+      if (status !== 200) return results;
+      const d = JSON.parse(body);
+      const games = ((d.data && d.data.games) || []).filter((g) => g && g.game_title);
+      const scored = games
+        .map((g) => ({ g, score: scoreMatch(name, g.game_title) }))
+        .filter((x) => x.score >= 60)
+        .sort((a, b) => b.score - a.score);
+      const best = scored[0];
+      if (!best) return results;
+
+      const ires = await this._httpGetJson(
+        `https://api.thegamesdb.net/v1/Games/Images?apikey=${key}&id=${encodeURIComponent(best.g.id)}`,
+        9000
+      );
+      if (ires.status !== 200) return results;
+      const di = JSON.parse(ires.body);
+      const data = di.data || {};
+      const base = (data.base_url && data.base_url.original) || 'https://cdn.thegamesdb.net/images/original/';
+      const label = best.g.game_title;
+      const push = (filename, width, height, source) => {
+        if (!filename) return;
+        const url = filename.startsWith('http') ? filename : base + filename;
+        if (results.some((r) => r.url === url)) return;
+        results.push({ url, thumb: url, width, height, source, label });
+      };
+      const boxart = (data.images && data.images.boxart) || [];
+      const front = (boxart.find((b) => b && b.side === 'front') || boxart[0] || {});
+      push(front.filename, 250, 363, 'thegamesdb');
+      for (const f of (data.images && data.images.fanart) || []) {
+        if (f && f.filename) push(f.filename, 1280, 720, 'tgdb-fanart');
+      }
+      for (const s of (data.images && data.images.screenshots) || []) {
+        if (s && s.filename) push(s.filename, 1280, 720, 'tgdb-shot');
+      }
+    } catch {
+      // ignore
     }
     return results;
   }

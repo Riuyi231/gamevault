@@ -1479,6 +1479,9 @@ button { cursor: pointer; }
 }
 .api-key-input::placeholder { color: var(--muted); }
 
+.api-key-pair { display: flex; gap: 8px; }
+.api-key-pair .api-key-input { margin-top: 6px; }
+
 /* ═══════════ EMULADORES (retro) ═══════════ */
 .emu-form { margin-top: 4px; }
 .emu-input {

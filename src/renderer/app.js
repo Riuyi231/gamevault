@@ -2567,6 +2567,15 @@
   $('#set-sgdb-key').addEventListener('change', (e) => {
     saveSettings({ sgdbKey: e.target.value.trim() });
   });
+  $('#set-igdb-id').addEventListener('change', (e) => {
+    saveSettings({ igdbClientId: e.target.value.trim() });
+  });
+  $('#set-igdb-secret').addEventListener('change', (e) => {
+    saveSettings({ igdbClientSecret: e.target.value.trim() });
+  });
+  $('#set-tgdb-key').addEventListener('change', (e) => {
+    saveSettings({ tgdbKey: e.target.value.trim() });
+  });
 
   $('#setting-sound').addEventListener('change', (e) => {
     Sound.setMuted(!e.target.checked);
@@ -2877,6 +2886,12 @@
       if (rawgInput) rawgInput.value = settings.rawgKey || '';
       const sgdbInput = $('#set-sgdb-key');
       if (sgdbInput) sgdbInput.value = settings.sgdbKey || '';
+      const igdbIdInput = $('#set-igdb-id');
+      if (igdbIdInput) igdbIdInput.value = settings.igdbClientId || '';
+      const igdbSecretInput = $('#set-igdb-secret');
+      if (igdbSecretInput) igdbSecretInput.value = settings.igdbClientSecret || '';
+      const tgdbInput = $('#set-tgdb-key');
+      if (tgdbInput) tgdbInput.value = settings.tgdbKey || '';
     } catch (err) {
       console.error('Failed to load settings:', err);
     }
@@ -2921,7 +2936,7 @@
         try { cfg = await api.getArtworkConfig(); } catch { cfg = null; }
       }
       resultsEl.innerHTML = '';
-      if (cfg && !cfg.hasRawgKey) {
+      if (cfg && !cfg.hasRawgKey && !cfg.hasIgdb && !cfg.hasTgdb) {
         const note = document.createElement('div');
         note.className = 'cover-rawg-note';
         note.innerHTML =
