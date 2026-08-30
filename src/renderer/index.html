@@ -746,26 +746,48 @@
       <span class="arcade-counter" id="arcade-counter"></span>
       <button class="arcade-exit" id="arcade-exit" title="Salir del modo consola" data-i18n-title="arcade.exit">✕</button>
     </div>
-    <div class="arcade-body">
-      <div class="arcade-hero">
-        <h2 class="arcade-title" id="arcade-title"></h2>
-        <div class="arcade-chips" id="arcade-chips">
-          <span class="detail-platform" id="arcade-platform"></span>
+    <!-- Vista inicio (Bento) -->
+    <div class="arcade-home" id="arcade-home" hidden>
+      <div class="arcade-sections" id="arcade-sections"></div>
+      <div class="arcade-grid" id="arcade-grid"></div>
+      <div class="arcade-hint" id="arcade-home-hint" data-i18n="arcade.hintHome"></div>
+    </div>
+
+    <!-- Vista juego (página grande) -->
+    <div class="arcade-game" id="arcade-game" hidden>
+      <div class="arcade-game-main">
+        <div class="arcade-hero">
+          <h2 class="arcade-title" id="arcade-title"></h2>
+          <div class="arcade-chips" id="arcade-chips">
+            <span class="detail-platform" id="arcade-platform"></span>
+          </div>
+          <div class="arcade-meta" id="arcade-meta"></div>
+          <p class="arcade-desc" id="arcade-desc"></p>
+          <div class="arcade-actions">
+            <button class="arcade-play" id="arcade-play">
+              <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
+              <span data-i18n="btn.play">Jugar</span>
+            </button>
+            <button class="arcade-back" id="arcade-back">
+              <svg viewBox="0 0 24 24"><polyline points="15,18 9,12 15,6"/></svg>
+              <span data-i18n="arcade.back">Inicio</span>
+            </button>
+          </div>
         </div>
-        <div class="arcade-meta" id="arcade-meta"></div>
-        <p class="arcade-desc" id="arcade-desc"></p>
-        <div class="arcade-actions">
-          <button class="arcade-play" id="arcade-play">
-            <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
-            <span data-i18n="btn.play">Jugar</span>
-          </button>
+        <div class="arcade-media" id="arcade-media" hidden>
+          <div class="arcade-media-label" data-i18n="arcade.media">Capturas y vídeos</div>
+          <div class="arcade-media-stage" id="arcade-media-stage">
+            <img id="arcade-media-view" alt="" draggable="false" />
+            <div class="arcade-media-tag" id="arcade-media-tag"></div>
+          </div>
+          <div class="arcade-media-strip" id="arcade-media-strip"></div>
         </div>
       </div>
       <div class="arcade-shelf">
-        <div class="arcade-shelf-label" id="arcade-shelf-label" data-i18n="arcade.shelfLabel">Tu biblioteca</div>
+        <div class="arcade-shelf-label" id="arcade-shelf-label"></div>
         <div class="arcade-shelf-row" id="arcade-shelf-row"></div>
-        <div class="arcade-hint" data-i18n="arcade.hint">← →  cambiar  ·  Enter  jugar  ·  Esc  salir</div>
       </div>
+      <div class="arcade-hint" id="arcade-game-hint" data-i18n="arcade.hintGame"></div>
     </div>
   </div>
 

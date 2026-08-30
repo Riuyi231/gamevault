@@ -71,6 +71,13 @@
     detailCache: new Map(),
     arcade: false,
     arcadeIndex: -1,
+    arcadeList: [],
+    arcadeView: 'home',
+    arcadeSection: 0,
+    arcadeFocus: 'shelf',
+    arcadeSections: [],
+    arcadeMediaList: [],
+    arcadeMediaIndex: 0,
     consolesOpen: false,
     locale: window.GV_I18N ? window.GV_I18N.DEFAULT_LOCALE : 'es',
     customFolders: [],
@@ -1294,12 +1301,10 @@
 
   /* ═══════════════ CONSOLE MODE (PS5-style) ═══════════════ */
   function arcadeGame() {
-    if (state.visibleGames.length === 0) return null;
-    if (state.arcadeIndex < 0 || state.arcadeIndex >= state.visibleGames.length) {
-      const si = state.selectedIndex >= 0 ? state.selectedIndex : 0;
-      state.arcadeIndex = si;
-    }
-    return state.visibleGames[state.arcadeIndex];
+    const list = state.arcadeList && state.arcadeList.length ? state.arcadeList : state.visibleGames;
+    if (list.length === 0) return null;
+    if (state.arcadeIndex < 0 || state.arcadeIndex >= list.length) state.arcadeIndex = 0;
+    return list[state.arcadeIndex];
   }
 
   const ARCADE_CURRENCY = { USD: '$', EUR: '€', GBP: '£', MXN: '$', ARS: '$', BRL: 'R$', CLP: '$', COP: '$' };
@@ -1325,9 +1330,13 @@
 
   function renderArcadeShell() {
     const wrap = $('#arcade-shelf-row');
-    if (state.arcadeShelfFor === state.visibleGames && wrap.children.length === state.visibleGames.length) return;
+    const list = state.arcadeList;
+    if (state.arcadeShelfFor === list && wrap.children.length === list.length) return;
     wrap.innerHTML = '';
-    state.visibleGames.forEach((g, i) => {
+    const label = $('#arcade-shelf-label');
+    const sec = state.arcadeSections[state.arcadeSection];
+    label.textContent = sec ? sec.label : T('arcade.shelfLabel', {});
+    list.forEach((g, i) => {
       const tile = document.createElement('div');
       tile.className = 'arcade-tile';
       tile.dataset.index = String(i);
@@ -1353,7 +1362,7 @@
       tile.addEventListener('mouseenter', () => { if (state.arcadeIndex !== i) arcadeNavTo(i); });
       wrap.appendChild(tile);
     });
-    state.arcadeShelfFor = state.visibleGames;
+    state.arcadeShelfFor = list;
   }
 
   let arcadeBgTimer = null;
@@ -1415,12 +1424,14 @@
 
     $('#arcade-platform').textContent = platformLabelOf(game);
     $('#arcade-platform').className = 'detail-platform ' + platformKeyOf(game);
-    $('#arcade-counter').textContent = `${state.arcadeIndex + 1} / ${state.visibleGames.length}`;
+    $('#arcade-counter').textContent = `${state.arcadeIndex + 1} / ${state.arcadeList.length}`;
 
     $('#arcade-meta').innerHTML = arcadeMetaLine(game, state.detailCache.get(game.id));
     const desc = $('#arcade-desc');
     desc.classList.add('loading');
     desc.textContent = T('detail.loading');
+
+    renderArcadeMedia(game);
 
     const tiles = Array.from($('#arcade-shelf-row').children);
     tiles.forEach((t) => t.classList.toggle('cur', Number(t.dataset.index) === state.arcadeIndex));
@@ -1459,7 +1470,7 @@
 
   function applyArcadeInfo(id, info) {
     if (!state.arcade) return;
-    const game = state.visibleGames[state.arcadeIndex];
+    const game = arcadeGame();
     if (!game || game.id !== id) return;
 
     const chips = $('#arcade-chips');
@@ -1475,6 +1486,8 @@
     if (info && info.screenshots && info.screenshots.length) {
       arcadeBgPlay(info.screenshots.slice(0, 4));
     }
+
+    if (state.arcadeView === 'game') renderArcadeMedia(game);
 
     const desc = $('#arcade-desc');
     if (info && info.shortDescription) {
@@ -1492,6 +1505,277 @@
     desc.classList.remove('loading');
   }
 
+  // ═══════════════ ARCADE HOME (Bento) + PÁGINA DE JUEGO ═══════════════
+
+  function arcadeSections() {
+    const out = [
+      { key: 'recent', label: T('arcade.recent') },
+      { key: 'all', label: T('arcade.all') }
+    ];
+    for (const g of consoleGroups()) {
+      const sel = state.visibleGames.some((x) => {
+        if (g.key.charAt(0) === 'c') return (x.platform || 'Retro') === g.label;
+        return 'p:' + platformKeyOf(x) === g.key;
+      });
+      if (sel) out.push({ key: g.key, label: g.label });
+    }
+    return out;
+  }
+
+  function arcadeSectionGames() {
+    const sec = state.arcadeSections[state.arcadeSection];
+    const base = state.visibleGames;
+    if (!sec || sec.key === 'all') return base;
+    if (sec.key === 'recent') {
+      if (!base.some((g) => (g.lastPlayed || g.playtimeMs || 0) > 0)) return base;
+      return base.slice().sort((a, b) =>
+        ((b.lastPlayed || 0) - (a.lastPlayed || 0)) || ((b.playtimeMs || 0) - (a.playtimeMs || 0)));
+    }
+    if (sec.key.charAt(0) === 'c') {
+      return base.filter((x) => (x.platform || 'Retro') === sec.key.slice(2));
+    }
+    return base.filter((x) => 'p:' + platformKeyOf(x) === sec.key);
+  }
+
+  function renderArcadeSections() {
+    const bar = $('#arcade-sections');
+    if (!bar) return;
+    bar.innerHTML = '';
+    state.arcadeSections.forEach((s, i) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'arcade-section-chip' + (i === state.arcadeSection ? ' cur' : '');
+      chip.textContent = s.label;
+      chip.addEventListener('click', () => { arcadeSectionGo(i); });
+      bar.appendChild(chip);
+    });
+  }
+
+  function arcadeSectionGo(i) {
+    if (!state.arcade) return;
+    if (i < 0 || i >= state.arcadeSections.length) return;
+    if (i === state.arcadeSection && state.arcadeView === 'home') return;
+    state.arcadeSection = i;
+    state.arcadeIndex = 0;
+    state.arcadeView = 'home';
+    state.arcadeFocus = 'shelf';
+    renderArcadeHome();
+    Sound.select();
+  }
+
+  function renderArcadeHome() {
+    const list = arcadeSectionGames();
+    state.arcadeList = list;
+    if (state.arcadeIndex >= list.length) state.arcadeIndex = Math.max(0, list.length - 1);
+    const game = list[state.arcadeIndex] || null;
+    $('#arcade-home').hidden = false;
+    $('#arcade-game').hidden = true;
+    renderArcadeSections();
+    const grid = $('#arcade-grid');
+    grid.style.setProperty('--cols', String(state.columns || 5));
+    if (state.arcadeGridFor !== list) {
+      grid.innerHTML = '';
+      const wide = state.arcadeSection === 0 || state.arcadeSection === 1;
+      list.forEach((g, i) => {
+        const tile = document.createElement('div');
+        tile.className = 'arcade-tile' + (wide && i === 0 ? ' wide' : '');
+        tile.dataset.index = String(i);
+        const cover = document.createElement('div');
+        cover.className = 'arcade-tile-cover';
+        const img = document.createElement('img');
+        img.alt = g.name;
+        img.loading = 'lazy';
+        img.draggable = false;
+        img.src = getCoverSrc(g);
+        img.onerror = () => { img.src = 'default-cover.svg'; };
+        const hint = document.createElement('div');
+        hint.className = 'arcade-tile-play';
+        hint.innerHTML = '<svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>';
+        cover.appendChild(img);
+        cover.appendChild(hint);
+        const name = document.createElement('div');
+        name.className = 'arcade-tile-name';
+        name.textContent = g.name;
+        tile.appendChild(cover);
+        tile.appendChild(name);
+        tile.addEventListener('click', () => { arcadeNavTo(i); arcadeOpenGame(); });
+        tile.addEventListener('mouseenter', () => {
+          if (state.arcadeView === 'home' && state.arcadeIndex !== i) arcadeFocusIdx(i);
+        });
+        grid.appendChild(tile);
+      });
+      state.arcadeGridFor = list;
+    }
+    const tiles = Array.from(grid.children);
+    tiles.forEach((t) => t.classList.toggle('cur', Number(t.dataset.index) === state.arcadeIndex));
+    const cur = tiles[state.arcadeIndex];
+    if (cur) cur.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    $('#arcade-counter').textContent = `${state.arcadeIndex + 1} / ${list.length}`;
+    if (game) {
+      const imgs = arcadeBgFor(game);
+      if (imgs.length) arcadeBgPlay(imgs);
+      else arcadeBgStatic('');
+    } else {
+      arcadeBgStatic('');
+    }
+  }
+
+  function arcadeFocusIdx(i) {
+    const list = state.arcadeList;
+    if (i < 0 || i >= list.length || i === state.arcadeIndex) return;
+    state.arcadeIndex = i;
+    const game = list[i];
+    if (!game) return;
+    selectGame(game.id);
+    if (state.arcadeView === 'home') {
+      Sound.move();
+      const grid = $('#arcade-grid');
+      Array.from(grid.children).forEach((t) => t.classList.toggle('cur', Number(t.dataset.index) === i));
+      const cur = grid.children[i];
+      if (cur) cur.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      $('#arcade-counter').textContent = `${i + 1} / ${list.length}`;
+      const imgs = arcadeBgFor(game);
+      if (imgs.length) arcadeBgPlay(imgs);
+      else arcadeBgStatic('');
+    } else {
+      renderArcade(game);
+    }
+  }
+
+  function arcadeNav(dir) {
+    if (!state.arcade || state.arcadeList.length === 0) return;
+    if (state.arcadeView === 'home') { arcadeNavGrid(dir, 0); return; }
+    const n = state.arcadeList.length;
+    const next = (state.arcadeIndex + dir + n) % n;
+    if (next !== state.arcadeIndex) arcadeFocusIdx(next);
+  }
+
+  function arcadeNavGrid(dx, dy) {
+    const n = state.arcadeList.length;
+    if (!state.arcade || n === 0) return;
+    const cols = Math.max(1, state.columns || 5);
+    let next = state.arcadeIndex + dx + dy * cols;
+    if (next < 0) next = 0;
+    if (next >= n) next = n - 1;
+    if (next !== state.arcadeIndex) arcadeFocusIdx(next);
+  }
+
+  function arcadeNavTo(i) {
+    if (!state.arcade) return;
+    if (i < 0 || i >= state.arcadeList.length || i === state.arcadeIndex) return;
+    arcadeFocusIdx(i);
+  }
+
+  // ═══════════════ CARRUSEL DE CAPTURAS / VÍDEOS ═══════════════
+
+  function arcadeMediaOf(game) {
+    const info = state.detailCache.get(game.id);
+    const out = [];
+    if (!info) return out;
+    (info.screenshots || []).forEach((s) => { if (s) out.push({ kind: 'img', src: s }); });
+    (info.movies || []).forEach((m) => { if (m && m.src) out.push({ kind: 'video', src: m.src, thumb: m.thumbnail, name: m.name }); });
+    return out;
+  }
+
+  function renderArcadeMedia(game) {
+    const box = $('#arcade-media');
+    const media = arcadeMediaOf(game);
+    state.arcadeMediaList = media;
+    box.hidden = media.length === 0;
+    if (media.length === 0) return;
+    if (state.arcadeMediaIndex >= media.length) state.arcadeMediaIndex = 0;
+    const strip = $('#arcade-media-strip');
+    strip.innerHTML = '';
+    media.forEach((m, i) => {
+      const el = document.createElement('div');
+      el.className = 'arcade-media-thumb';
+      el.dataset.index = String(i);
+      const th = document.createElement('img');
+      th.src = m.thumb || (m.kind === 'img' ? m.src : '');
+      th.alt = m.name || '';
+      th.loading = 'lazy';
+      th.draggable = false;
+      th.onerror = () => { th.style.display = 'none'; };
+      const badge = document.createElement('div');
+      badge.className = 'arcade-media-badge';
+      if (m.kind === 'video') badge.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      el.appendChild(th);
+      el.appendChild(badge);
+      el.addEventListener('click', () => { arcadeMediaGo(i); });
+      strip.appendChild(el);
+    });
+    renderArcadeMediaStage();
+  }
+
+  function renderArcadeMediaStage() {
+    const media = state.arcadeMediaList;
+    if (!media.length) return;
+    const i = state.arcadeMediaIndex || 0;
+    const m = media[i];
+    if (!m) return;
+    const view = $('#arcade-media-view');
+    const pre = m.thumb || (m.kind === 'img' ? m.src : '');
+    view.style.visibility = pre ? '' : 'hidden';
+    view.src = pre;
+    const tag = $('#arcade-media-tag');
+    tag.textContent = m.kind === 'video' ? (m.name || 'Tráiler') : `${i + 1} / ${media.length}`;
+    const thumbs = Array.from($('#arcade-media-strip').children);
+    thumbs.forEach((t) => t.classList.toggle('cur', Number(t.dataset.index) === i));
+    const cur = thumbs[i];
+    if (cur) cur.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    Sound.move();
+  }
+
+  function arcadeMediaMove(dir) {
+    const n = state.arcadeMediaList.length;
+    if (!state.arcade || n === 0) return;
+    state.arcadeMediaIndex = (state.arcadeMediaIndex + dir + n) % n;
+    renderArcadeMediaStage();
+  }
+
+  function arcadeMediaGo(i) {
+    if (i < 0 || i >= state.arcadeMediaList.length || i === state.arcadeMediaIndex) return;
+    state.arcadeMediaIndex = i;
+    renderArcadeMediaStage();
+  }
+
+  function openArcadeMediaItem() {
+    const m = state.arcadeMediaList[state.arcadeMediaIndex];
+    if (!m) return;
+    Sound.select();
+    if (m.kind === 'video') openShotView(m.src, true);
+    else openShotView(m.src, false);
+  }
+
+  function arcadeOpenGame() {
+    if (!state.arcade || state.arcadeView !== 'home') return;
+    const g = arcadeGame();
+    if (!g) return;
+    state.arcadeView = 'game';
+    state.arcadeFocus = 'shelf';
+    $('#arcade-home').hidden = true;
+    $('#arcade-game').hidden = false;
+    renderArcade(g);
+    Sound.select();
+  }
+
+  function arcadeBackHome() {
+    if (!state.arcade || state.arcadeView !== 'game') return;
+    state.arcadeView = 'home';
+    state.arcadeFocus = 'shelf';
+    renderArcadeHome();
+    Sound.select();
+  }
+
+  function setArcadeFocus(f) {
+    if (!state.arcade || state.arcadeView !== 'game') return;
+    if (f === state.arcadeFocus) return;
+    state.arcadeFocus = f;
+    const box = $('#arcade-media');
+    if (box) box.classList.toggle('focused', f === 'media');
+    Sound.move();
+  }
+
   async function arcadeSetFullscreen(on) {
     if (typeof api.setArcadeFullscreen !== 'function') return false;
     try { await api.setArcadeFullscreen(on); return true; } catch { return false; }
@@ -1504,11 +1788,20 @@
 
   function openArcade() {
     if (state.visibleGames.length === 0) return;
+    const si = state.selectedIndex >= 0 ? state.selectedIndex : 0;
     state.arcade = true;
+    state.arcadeView = 'home';
+    state.arcadeFocus = 'shelf';
+    state.arcadeSection = 0;
+    state.arcadeIndex = si < state.visibleGames.length ? si : 0;
+    state.arcadeSections = arcadeSections();
+    state.arcadeMediaList = [];
+    state.arcadeMediaIndex = 0;
+    state.arcadeGridFor = null;
     const el = $('#arcade');
     el.classList.add('active');
     el.setAttribute('aria-hidden', 'false');
-    renderArcade(arcadeGame());
+    renderArcadeHome();
     Promise.resolve()
       .then(arcadeQueryFullscreen)
       .then((alreadyFs) => {
@@ -1524,6 +1817,9 @@
 
   function closeArcade() {
     state.arcade = false;
+    state.arcadeView = 'home';
+    state.arcadeFocus = 'shelf';
+    state.arcadeSection = 0;
     const el = $('#arcade');
     el.classList.remove('active');
     el.setAttribute('aria-hidden', 'true');
@@ -1559,6 +1855,8 @@
       setTimeout(closeArcade, 650);
     }
   });
+  $('#arcade-back').addEventListener('click', arcadeBackHome);
+  $('#arcade-media-stage').addEventListener('click', openArcadeMediaItem);
   $('#arcade-exit').addEventListener('click', closeArcade);
 
   /* ═══════════════ CONSOLES DASHBOARD ═══════════════ */
@@ -1899,27 +2197,61 @@
       return;
     }
 
-    // Modo arcade: navegación simplificada
+    // Modo arcade: navegación tipo consola
     if (state.arcade) {
-      if (e.key === 'Escape' || e.key === 'F11' || e.key === 'Tab' || e.key === 'Backspace') {
+      if (e.key === 'F11' || e.key === 'Tab' || e.key === 'Backspace') {
         e.preventDefault();
         closeArcade();
         return;
       }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (state.arcadeView === 'game') arcadeBackHome();
+        else closeArcade();
+        return;
+      }
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        e.preventDefault();
+        if (state.arcadeView === 'game') {
+          if (state.arcadeMediaList.length && state.arcadeFocus === 'shelf') setArcadeFocus('media');
+          else if (state.arcadeMediaList.length) setArcadeFocus('shelf');
+        } else {
+          arcadeNavGrid(0, -1);
+        }
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        if (state.arcadeView === 'game') {
+          if (state.arcadeMediaList.length && state.arcadeFocus === 'shelf') setArcadeFocus('media');
+          else if (state.arcadeMediaList.length) setArcadeFocus('shelf');
+        } else {
+          arcadeNavGrid(0, 1);
+        }
+        return;
+      }
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         e.preventDefault();
-        arcadeNav(-1);
+        if (state.arcadeView === 'game' && state.arcadeFocus === 'media') arcadeMediaMove(-1);
+        else arcadeNav(-1);
         return;
       }
       if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         e.preventDefault();
-        arcadeNav(1);
+        if (state.arcadeView === 'game' && state.arcadeFocus === 'media') arcadeMediaMove(1);
+        else arcadeNav(1);
         return;
       }
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        const g = arcadeGame();
-        if (g) { launchGame(g.id); setTimeout(closeArcade, 650); }
+        if (state.arcadeView === 'home') {
+          arcadeOpenGame();
+        } else if (state.arcadeFocus === 'media') {
+          openArcadeMediaItem();
+        } else {
+          const g = arcadeGame();
+          if (g) { launchGame(g.id); setTimeout(closeArcade, 650); }
+        }
         return;
       }
     }
@@ -2137,15 +2469,74 @@
       return;
     }
 
-    // ── Modo arcade: navegación simplificada con mando ──
+    // ── Modo arcade: navegación con mando ──
     if (state.arcade) {
-      const n = cards.length;
+      const n = state.arcadeList.length;
       if (n === 0) return;
       const arcDx = ax(0);
-      const turnedX = btn(15) ? 1 : btn(14) ? -1 : 0;
-      const movedX = turnedX !== 0 ? turnedX : (Math.abs(arcDx) > GAMEPAD.deadzone ? (arcDx > 0 ? 1 : -1) : 0);
+      const arcDy = ax(1);
+      const padX = btn(15) ? 1 : btn(14) ? -1 : 0;
+      const padY = btn(13) ? 1 : btn(12) ? -1 : 0;
+      const movedX = padX !== 0 ? padX : (Math.abs(arcDx) > GAMEPAD.deadzone ? (arcDx > 0 ? 1 : -1) : 0);
+      const movedY = padY !== 0 ? padY : (Math.abs(arcDy) > GAMEPAD.deadzone ? (arcDy > 0 ? 1 : -1) : 0);
+
+      const moved = (movedX !== 0 || movedY !== 0);
+      if (state.arcadeView === 'home') {
+        if (moved) {
+          const key = 'arc' + movedX + ':' + movedY;
+          if (!GAMEPAD.heldSince[key]) {
+            GAMEPAD.heldSince[key] = now;
+            GAMEPAD.lastNav[key] = now;
+            arcadeNavGrid(movedX, movedY);
+          } else {
+            const held = now - GAMEPAD.heldSince[key];
+            const interval = held > 2000 ? 45 : held > 900 ? 60 : GAMEPAD.repeatRate;
+            if (now - GAMEPAD.lastNav[key] >= interval) {
+              GAMEPAD.lastNav[key] = now;
+              arcadeNavGrid(movedX, movedY);
+            }
+          }
+        } else {
+          GAMEPAD.heldSince = {};
+          GAMEPAD.lastNav = {};
+        }
+        handleButton(pad, 0, arcadeOpenGame);
+        handleButton(pad, 1, closeArcade);
+        handleButton(pad, 8, closeArcade);
+        handleButton(pad, 4, () => arcadeSectionGo((state.arcadeSection - 1 + state.arcadeSections.length) % state.arcadeSections.length));
+        handleButton(pad, 5, () => arcadeSectionGo((state.arcadeSection + 1) % state.arcadeSections.length));
+        return;
+      }
+
+      if (state.arcadeFocus === 'media') {
+        if (movedX !== 0) {
+          const key = 'arcm' + movedX;
+          if (!GAMEPAD.heldSince[key]) {
+            GAMEPAD.heldSince[key] = now;
+            GAMEPAD.lastNav[key] = now;
+            arcadeMediaMove(movedX);
+          } else {
+            const held = now - GAMEPAD.heldSince[key];
+            const interval = held > 2000 ? 45 : held > 900 ? 60 : GAMEPAD.repeatRate;
+            if (now - GAMEPAD.lastNav[key] >= interval) {
+              GAMEPAD.lastNav[key] = now;
+              arcadeMediaMove(movedX);
+            }
+          }
+        } else {
+          GAMEPAD.heldSince = {};
+          GAMEPAD.lastNav = {};
+        }
+        if (movedY !== 0 && Math.abs(movedY) === 1) setArcadeFocus('shelf');
+        handleButton(pad, 0, openArcadeMediaItem);
+        handleButton(pad, 1, () => setArcadeFocus('shelf'));
+        handleButton(pad, 8, () => setArcadeFocus('shelf'));
+        return;
+      }
+
+      // Foco estante (página de juego)
       if (movedX !== 0) {
-        const key = 'arc' + movedX;
+        const key = 'arcs' + movedX;
         if (!GAMEPAD.heldSince[key]) {
           GAMEPAD.heldSince[key] = now;
           GAMEPAD.lastNav[key] = now;
@@ -2162,12 +2553,18 @@
         GAMEPAD.heldSince = {};
         GAMEPAD.lastNav = {};
       }
+      if (movedY !== 0) {
+        if (state.arcadeMediaList.length) setArcadeFocus('media');
+        else if (movedY < 0) arcadeBackHome();
+      }
       handleButton(pad, 0, () => {
         const g = arcadeGame();
         if (g) { launchGame(g.id); setTimeout(closeArcade, 650); }
       });
-      handleButton(pad, 1, closeArcade);
-      handleButton(pad, 8, closeArcade);
+      handleButton(pad, 1, () => { if (state.arcadeView === 'game') arcadeBackHome(); });
+      handleButton(pad, 8, () => { if (state.arcadeView === 'game') arcadeBackHome(); });
+      handleButton(pad, 4, () => arcadeSectionGo((state.arcadeSection - 1 + state.arcadeSections.length) % state.arcadeSections.length));
+      handleButton(pad, 5, () => arcadeSectionGo((state.arcadeSection + 1) % state.arcadeSections.length));
       return;
     }
 
