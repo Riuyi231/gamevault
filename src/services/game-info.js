@@ -271,7 +271,7 @@ class GameInfoService {
       const esc = String(name).replace(/"/g, '\\"');
       const { status, body } = await this._igdbPost(
         '/v4/games',
-        `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,videos.video_id,summary,storyline,genres.name,platforms.name,first_release_date,aggregated_rating,rating,rating_count,involved_companies.company.name,involved_companies.developer,involved_companies.publisher; search "${esc}"; limit 8;`
+        `fields name,slug,category,cover.image_id,screenshots.image_id,artworks.image_id,videos.video_id,summary,storyline,genres.name,platforms.name,first_release_date,aggregated_rating,rating,rating_count,involved_companies.company.name,involved_companies.developer,involved_companies.publisher; search "${esc}"; limit 8;`
       );
       if (status !== 200) return null;
       const list = JSON.parse(body);
@@ -291,43 +291,50 @@ class GameInfoService {
 
       const matches = list
         .filter((r) => r && r.name)
-        .sort((x, y) => scoreMatch(name, y.name) - scoreMatch(name, x.name));
-      const best =
-        matches.find((r) => scoreMatch(name, r.name) >= 100 && r.category === 0) ||
-        matches.find((r) => scoreMatch(name, r.name) >= 100) ||
-        matches.find((r) => r.category === 0) ||
-        matches[0];
+        .map((r) => {
+          const sc = scoreMatch(name, r.name);
+          const hasMedia = !!((r.screenshots && r.screenshots.length) || (r.videos && r.videos.length));
+          const key =
+            (sc >= 100 ? 3 : 1) * 100000 +
+            (r.category === 0 ? 20000 : 0) +
+            (hasMedia ? 10000 : 0) +
+            Math.min(Number(r.rating_count || r.rating || 0), 10000);
+          return { r, sc, key };
+        })
+        .filter((x) => x.sc >= 60)
+        .sort((a, b) => b.key - a.key);
+      const best = matches[0];
       if (!best) return null;
 
       const img = (id, size) => (id ? `https://images.igdb.com/igdb/image/upload/t_${size}/${id}.jpg` : '');
-      const coverId = best.cover && best.cover.image_id;
-      const shots = (best.screenshots || []).map((s) => img(s.image_id, '720p')).filter(Boolean);
-      const arts = (best.artworks || []).map((a) => img(a.image_id, '720p')).filter(Boolean);
-      const release = best.first_release_date ? new Date(best.first_release_date * 1000) : null;
-      const companies = Array.isArray(best.involved_companies) ? best.involved_companies : [];
+      const coverId = best.r.cover && best.r.cover.image_id;
+      const shots = (best.r.screenshots || []).map((s) => img(s.image_id, '720p')).filter(Boolean);
+      const arts = (best.r.artworks || []).map((a) => img(a.image_id, '720p')).filter(Boolean);
+      const release = best.r.first_release_date ? new Date(best.r.first_release_date * 1000) : null;
+      const companies = Array.isArray(best.r.involved_companies) ? best.r.involved_companies : [];
       const info = {
-        name: best.name,
-        shortDescription: (best.summary || '').split(/\.\s/)[0] + '.' || '',
-        detailedDescription: best.summary || best.storyline || '',
-        about: best.summary || '',
+        name: best.r.name,
+        shortDescription: (best.r.summary || '').split(/\.\s/)[0] + '.' || '',
+        detailedDescription: best.r.summary || best.r.storyline || '',
+        about: best.r.summary || '',
         developers: companies.filter((c) => c.developer).map((c) => c.company && c.company.name).filter(Boolean),
         publishers: companies.filter((c) => c.publisher).map((c) => c.company && c.company.name).filter(Boolean),
-        genres: Array.isArray(best.genres) ? best.genres.map((g) => g.name).filter(Boolean) : [],
-        categories: Array.isArray(best.genres) ? best.genres.map((g) => g.name).filter(Boolean) : [],
+        genres: Array.isArray(best.r.genres) ? best.r.genres.map((g) => g.name).filter(Boolean) : [],
+        categories: Array.isArray(best.r.genres) ? best.r.genres.map((g) => g.name).filter(Boolean) : [],
         releaseDate: release ? `${release.getFullYear()}-${String(release.getMonth() + 1).padStart(2, '0')}-${String(release.getDate()).padStart(2, '0')}` : '',
         comingSoon: false,
         price: null,
         isFree: false,
         type: 'game',
         metascore: null,
-        rating: best.aggregated_rating || best.rating || null,
+        rating: best.r.aggregated_rating || best.r.rating || null,
         screenshot: shots[0] || arts[0] || '',
         header: shots[0] || arts[0] || '',
         coverUrl: img(coverId, 'cover_big') || shots[0] || '',
         banner: arts[0] || shots[0] || '',
         screenshots: shots.length ? shots : arts,
-        movies: Array.isArray(best.videos)
-          ? best.videos
+        movies: Array.isArray(best.r.videos)
+          ? best.r.videos
               .map((v) => {
                 const vid = v && v.video_id;
                 if (!vid) return null;
@@ -341,7 +348,7 @@ class GameInfoService {
               .filter(Boolean)
           : [],
         source: 'igdb',
-        platforms: Array.isArray(best.platforms) ? best.platforms.map((p) => p.name).filter(Boolean) : []
+        platforms: Array.isArray(best.r.platforms) ? best.r.platforms.map((p) => p.name).filter(Boolean) : []
       };
       this.cache.set(cacheKey, info);
       return info;
@@ -1019,6 +1026,22 @@ class GameInfoService {
       const igdbInfo = await this._igdbSearch(game.name);
       if (igdbInfo) {
         const final = await this._wikiLocalized(igdbInfo, game.name);
+        // Relleno con Steam si IGDB no trajo capturas o tráilers (p.ej. juegos
+        // poco conocidos): la tienda suele tener ambos aunque IGDB no.
+        if ((!final.screenshots || !final.screenshots.length || !final.movies || !final.movies.length) &&
+          game.appId && /^\d{1,8}$/.test(String(game.appId))) {
+          const steam = await this._fetchSteamAppDetails(game.appId);
+          if (steam) {
+            if (!final.screenshots || !final.screenshots.length) {
+              final.screenshots = (steam.screenshots || []).filter(Boolean);
+              if (!final.screenshot) final.screenshot = (final.screenshots[0] || '');
+              if (!final.header) final.header = (final.screenshots[0] || '');
+            }
+            if (!final.movies || !final.movies.length) {
+              final.movies = (steam.movies || []).filter((m) => m && m.src);
+            }
+          }
+        }
         this.cache.set(cacheKey, stampInfo(final));
         return stampInfo(final);
       }
