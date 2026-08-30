@@ -1298,6 +1298,7 @@
     }
     if (price != null) parts.push(`<span class="arcade-meta-item">${esc(price)}</span>`);
     if (info && info.developers && info.developers.length) parts.push(`<span class="arcade-meta-item">${esc(info.developers.slice(0, 2).join(', '))}</span>`);
+    if (info && info.publishers && info.publishers.length) parts.push(`<span class="arcade-meta-item">${esc(info.publishers.slice(0, 2).join(', '))}</span>`);
     if (info && info.platforms && info.platforms.length) parts.push(`<span class="arcade-meta-item">${esc(info.platforms.slice(0, 4).join(', '))}</span>`);
     if (game.playtimeMs > 0) parts.push(`<span class="arcade-meta-item">${esc(formatPlaytime(game.playtimeMs))}</span>`);
     return parts.join('');
@@ -1336,12 +1337,59 @@
     state.arcadeShelfFor = state.visibleGames;
   }
 
+  let arcadeBgTimer = null;
+  function arcadeBgStatic(src) {
+    if (arcadeBgTimer) { clearInterval(arcadeBgTimer); arcadeBgTimer = null; }
+    const bg = $('#arcade-bg');
+    if (!bg) return;
+    bg.innerHTML = '';
+    bg.style.backgroundImage = src ? `url("${src}")` : '';
+  }
+
+  // Fondo cinematográfico: alterna las capturas reales del juego (o el banner)
+  // con un crossfade suave entre dos capas. Se detiene al cambiar de juego.
+  function arcadeBgPlay(imgs) {
+    if (arcadeBgTimer) { clearInterval(arcadeBgTimer); arcadeBgTimer = null; }
+    const bg = $('#arcade-bg');
+    if (!bg) return;
+    const list = (imgs || []).filter(Boolean);
+    if (list.length <= 1) { arcadeBgStatic(list[0]); return; }
+    bg.style.backgroundImage = '';
+    while (bg.children.length < 2) {
+      const l = document.createElement('div');
+      l.className = 'arcade-bg-layer';
+      bg.appendChild(l);
+    }
+    const layers = Array.from(bg.children).slice(0, 2);
+    const setLayer = (el, url) => { el.style.backgroundImage = url ? `url("${url}")` : 'none'; };
+    let cur = 0;
+    let i = 0;
+    setLayer(layers[0], list[0]);
+    layers[0].classList.add('on');
+    layers[1].classList.remove('on');
+    arcadeBgTimer = setInterval(() => {
+      i = (i + 1) % list.length;
+      const next = layers[cur === 0 ? 1 : 0];
+      setLayer(next, list[i]);
+      next.classList.add('on');
+      layers[cur].classList.remove('on');
+      cur = cur === 0 ? 1 : 0;
+    }, 6000);
+  }
+
+  function arcadeBgFor(game) {
+    const info = state.detailCache.get(game.id);
+    if (info && info.screenshots && info.screenshots.length) return info.screenshots.slice(0, 4);
+    const bannerSrc = getBannerSrc(game);
+    return bannerSrc && bannerSrc !== 'default-cover.svg' ? [bannerSrc] : [];
+  }
+
   function renderArcade(game) {
     if (!game) return;
     renderArcadeShell();
-    const bg = $('#arcade-bg');
-    const bannerSrc = getBannerSrc(game);
-    bg.style.backgroundImage = bannerSrc && bannerSrc !== 'default-cover.svg' ? `url("${bannerSrc}")` : '';
+    const imgs = arcadeBgFor(game);
+    if (imgs.length) arcadeBgPlay(imgs);
+    else arcadeBgStatic('');
 
     const title = $('#arcade-title');
     title.textContent = game.name;
@@ -1405,6 +1453,10 @@
 
     $('#arcade-meta').innerHTML = arcadeMetaLine(game, info);
 
+    if (info && info.screenshots && info.screenshots.length) {
+      arcadeBgPlay(info.screenshots.slice(0, 4));
+    }
+
     const desc = $('#arcade-desc');
     if (info && info.shortDescription) {
       desc.textContent = info.shortDescription;
@@ -1421,6 +1473,16 @@
     desc.classList.remove('loading');
   }
 
+  async function arcadeSetFullscreen(on) {
+    if (typeof api.setArcadeFullscreen !== 'function') return false;
+    try { await api.setArcadeFullscreen(on); return true; } catch { return false; }
+  }
+
+  async function arcadeQueryFullscreen() {
+    if (typeof api.getWindowFullscreen !== 'function') return false;
+    try { return !!(await api.getWindowFullscreen()); } catch { return false; }
+  }
+
   function openArcade() {
     if (state.visibleGames.length === 0) return;
     state.arcade = true;
@@ -1428,6 +1490,17 @@
     el.classList.add('active');
     el.setAttribute('aria-hidden', 'false');
     renderArcade(arcadeGame());
+    Promise.resolve()
+      .then(arcadeQueryFullscreen)
+      .then((alreadyFs) => {
+        if (!alreadyFs) {
+          state.arcadeFs = false;
+          return arcadeSetFullscreen(true).then((ok) => { state.arcadeFs = !!ok; });
+        }
+        state.arcadeFs = false;
+        return null;
+      })
+      .catch(() => { state.arcadeFs = false; });
   }
 
   function closeArcade() {
@@ -1435,6 +1508,11 @@
     const el = $('#arcade');
     el.classList.remove('active');
     el.setAttribute('aria-hidden', 'true');
+    if (arcadeBgTimer) { clearInterval(arcadeBgTimer); arcadeBgTimer = null; }
+    if (state.arcadeFs) {
+      state.arcadeFs = false;
+      arcadeSetFullscreen(false);
+    }
   }
 
   function arcadeNav(dir) {

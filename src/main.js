@@ -1027,6 +1027,23 @@ function setupIPC() {
   ipcMain.on('window-fullscreen', () => {
     if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
   });
+
+  // Modo consola: pantalla completa real de la ventana (y restauración).
+  // Se usa event.sender para funcionar también desde ventanas de test.
+  ipcMain.handle('get-window-fullscreen', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return !!(win && win.isFullScreen());
+  });
+
+  ipcMain.handle('set-arcade-fullscreen', async (event, on) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) win.setFullScreen(!!on);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /* ─────────────────────────── AUTO-UPDATE ─────────────────────────── */

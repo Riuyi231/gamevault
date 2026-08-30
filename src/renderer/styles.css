@@ -2403,6 +2403,15 @@ input[type='range']::-webkit-slider-thumb {
   transform: scale(1.08);
   transition: background-image 0.6s ease;
 }
+.arcade-bg-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 30%;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+.arcade-bg-layer.on { opacity: 1; }
 .arcade-shade {
   position: absolute;
   inset: 0;
