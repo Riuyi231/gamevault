@@ -698,18 +698,19 @@ class ArtworkService {
     try {
       const esc = String(name).replace(/"/g, '\\"');
       const payload =
-        `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,platforms.name,rating; ` +
-        `search "${esc}"; where category = 0; limit 8;`;
+        `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,platforms.name,rating,category; ` +
+        `search "${esc}"; limit 8;`;
       const res = await this._igdbPost(payload);
       if (!res || res.status !== 200) return results;
       const { body } = res;
       const list = JSON.parse(body);
       if (!Array.isArray(list)) return results;
+      const mainGame = (g) => (g ? g.category === undefined || g.category === 0 : true);
       const scored = list
         .filter((g) => g && g.name)
         .map((g) => ({ g, score: scoreMatch(name, g.name) }))
         .filter((x) => x.score >= 60)
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => (b.score - a.score) + ((mainGame(b.g) ? 1 : 0) - (mainGame(a.g) ? 1 : 0)) * 100)
         .slice(0, 3);
       const img = (id, size) => (id ? `https://images.igdb.com/igdb/image/upload/t_${size}/${id}.jpg` : '');
       for (const { g } of scored) {

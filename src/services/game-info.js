@@ -271,7 +271,7 @@ class GameInfoService {
       const esc = String(name).replace(/"/g, '\\"');
       const { status, body } = await this._igdbPost(
         '/v4/games',
-        `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,videos.video_id,summary,storyline,genres.name,platforms.name,first_release_date,aggregated_rating,rating,rating_count,developers.name,publishers.name; search "${esc}"; where category = 0; limit 8;`
+        `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,videos.video_id,summary,storyline,genres.name,platforms.name,first_release_date,aggregated_rating,rating,rating_count,involved_companies.company.name,involved_companies.developer,involved_companies.publisher; search "${esc}"; limit 8;`
       );
       if (status !== 200) return null;
       const list = JSON.parse(body);
@@ -292,7 +292,11 @@ class GameInfoService {
       const matches = list
         .filter((r) => r && r.name)
         .sort((x, y) => scoreMatch(name, y.name) - scoreMatch(name, x.name));
-      const best = matches.find((r) => scoreMatch(name, r.name) >= 100) || matches[0];
+      const best =
+        matches.find((r) => scoreMatch(name, r.name) >= 100 && r.category === 0) ||
+        matches.find((r) => scoreMatch(name, r.name) >= 100) ||
+        matches.find((r) => r.category === 0) ||
+        matches[0];
       if (!best) return null;
 
       const img = (id, size) => (id ? `https://images.igdb.com/igdb/image/upload/t_${size}/${id}.jpg` : '');
@@ -300,13 +304,14 @@ class GameInfoService {
       const shots = (best.screenshots || []).map((s) => img(s.image_id, '720p')).filter(Boolean);
       const arts = (best.artworks || []).map((a) => img(a.image_id, '720p')).filter(Boolean);
       const release = best.first_release_date ? new Date(best.first_release_date * 1000) : null;
+      const companies = Array.isArray(best.involved_companies) ? best.involved_companies : [];
       const info = {
         name: best.name,
         shortDescription: (best.summary || '').split(/\.\s/)[0] + '.' || '',
         detailedDescription: best.summary || best.storyline || '',
         about: best.summary || '',
-        developers: Array.isArray(best.developers) ? best.developers.map((d) => d.name).filter(Boolean) : [],
-        publishers: Array.isArray(best.publishers) ? best.publishers.map((d) => d.name).filter(Boolean) : [],
+        developers: companies.filter((c) => c.developer).map((c) => c.company && c.company.name).filter(Boolean),
+        publishers: companies.filter((c) => c.publisher).map((c) => c.company && c.company.name).filter(Boolean),
         genres: Array.isArray(best.genres) ? best.genres.map((g) => g.name).filter(Boolean) : [],
         categories: Array.isArray(best.genres) ? best.genres.map((g) => g.name).filter(Boolean) : [],
         releaseDate: release ? `${release.getFullYear()}-${String(release.getMonth() + 1).padStart(2, '0')}-${String(release.getDate()).padStart(2, '0')}` : '',
