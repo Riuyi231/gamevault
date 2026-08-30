@@ -746,10 +746,32 @@
       <span class="arcade-counter" id="arcade-counter"></span>
       <button class="arcade-exit" id="arcade-exit" title="Salir del modo consola" data-i18n-title="arcade.exit">✕</button>
     </div>
-    <!-- Vista inicio (Bento) -->
+    <!-- Vista inicio (consola): detalle del juego en grande + parrilla -->
     <div class="arcade-home" id="arcade-home" hidden>
-      <div class="arcade-sections" id="arcade-sections"></div>
-      <div class="arcade-grid" id="arcade-grid"></div>
+      <div class="arcade-home-main">
+        <aside class="arcade-feature" id="arcade-feature">
+          <div class="arcade-feature-cover">
+            <img id="arcade-feature-img" alt="" draggable="false" />
+            <div class="arcade-feature-playbadge"><svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg></div>
+          </div>
+          <div class="arcade-feature-info">
+            <h2 class="arcade-title" id="arcade-feature-title"></h2>
+            <div class="arcade-chips" id="arcade-feature-chips">
+              <span class="detail-platform" id="arcade-feature-platform"></span>
+            </div>
+            <div class="arcade-meta" id="arcade-feature-meta"></div>
+            <p class="arcade-desc" id="arcade-feature-desc"></p>
+            <button class="arcade-play arcade-feature-play" id="arcade-feature-play">
+              <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
+              <span data-i18n="btn.play">Jugar</span>
+            </button>
+          </div>
+        </aside>
+        <div class="arcade-browse">
+          <div class="arcade-sections" id="arcade-sections"></div>
+          <div class="arcade-grid" id="arcade-grid"></div>
+        </div>
+      </div>
       <div class="arcade-hint" id="arcade-home-hint" data-i18n="arcade.hintHome"></div>
     </div>
 

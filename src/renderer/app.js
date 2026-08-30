@@ -1490,19 +1490,24 @@
     if (state.arcadeView === 'game') renderArcadeMedia(game);
 
     const desc = $('#arcade-desc');
-    if (info && info.shortDescription) {
-      desc.textContent = info.shortDescription;
-    } else if (info && info.detailedDescription) {
-      desc.textContent = info.detailedDescription;
-    } else {
-      const lines = [];
-      lines.push(T('detail.desc.platform', { label: esc(platformLabelOf(game)) }));
-      if (game.romPath) lines.push(T('detail.desc.rom', { path: esc(game.romPath) }));
-      else if (game.installDir) lines.push(T('detail.desc.location', { path: esc(game.installDir) }));
-      if (game.sizeOnDisk) lines.push(T('detail.desc.size', { size: (game.sizeOnDisk / 1073741824).toFixed(1) }));
-      desc.textContent = lines.join('  ·  ');
-    }
+    desc.textContent = arcadeDescText(game, info);
     desc.classList.remove('loading');
+
+    const fChips = $('#arcade-feature-chips');
+    if (fChips) {
+      const platformEl = $('#arcade-feature-platform');
+      fChips.innerHTML = (platformEl ? platformEl.outerHTML : '') +
+        (info && info.genres && info.genres.length
+          ? info.genres.slice(0, 6).map((g) => `<span class="arcade-chip">${esc(g)}</span>`).join('')
+          : '');
+    }
+    const fMeta = $('#arcade-feature-meta');
+    if (fMeta) fMeta.innerHTML = arcadeMetaLine(game, info);
+    const fDesc = $('#arcade-feature-desc');
+    if (fDesc) {
+      fDesc.classList.remove('loading');
+      fDesc.textContent = arcadeDescText(game, info);
+    }
   }
 
   // ═══════════════ ARCADE HOME (Bento) + PÁGINA DE JUEGO ═══════════════
@@ -1572,13 +1577,13 @@
     $('#arcade-game').hidden = true;
     renderArcadeSections();
     const grid = $('#arcade-grid');
-    grid.style.setProperty('--cols', String(state.columns || 5));
+    const cols = Math.max(1, Math.min(state.columns || 5, 6));
+    grid.style.setProperty('--cols', String(cols));
     if (state.arcadeGridFor !== list) {
       grid.innerHTML = '';
-      const wide = state.arcadeSection === 0 || state.arcadeSection === 1;
       list.forEach((g, i) => {
         const tile = document.createElement('div');
-        tile.className = 'arcade-tile' + (wide && i === 0 ? ' wide' : '');
+        tile.className = 'arcade-tile';
         tile.dataset.index = String(i);
         const cover = document.createElement('div');
         cover.className = 'arcade-tile-cover';
@@ -1611,6 +1616,7 @@
     const cur = tiles[state.arcadeIndex];
     if (cur) cur.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
     $('#arcade-counter').textContent = `${state.arcadeIndex + 1} / ${list.length}`;
+    renderArcadeFeature(game);
     if (game) {
       const imgs = arcadeBgFor(game);
       if (imgs.length) arcadeBgPlay(imgs);
@@ -1634,12 +1640,60 @@
       const cur = grid.children[i];
       if (cur) cur.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
       $('#arcade-counter').textContent = `${i + 1} / ${list.length}`;
+      renderArcadeFeature(game);
       const imgs = arcadeBgFor(game);
       if (imgs.length) arcadeBgPlay(imgs);
       else arcadeBgStatic('');
     } else {
       renderArcade(game);
     }
+  }
+
+  // Panel de detalle del juego seleccionado en el home (estilo consola)
+  function renderArcadeFeature(game) {
+    if (!game) {
+      const fp = $('#arcade-feature');
+      if (fp) fp.style.display = 'none';
+      return;
+    }
+    const fp = $('#arcade-feature');
+    if (fp) fp.style.display = '';
+    const img = $('#arcade-feature-img');
+    if (img) {
+      const src = getCoverSrc(game);
+      if (img.dataset.srcKey !== src) {
+        img.dataset.srcKey = src;
+        img.src = src;
+        img.onerror = () => { img.src = 'default-cover.svg'; };
+      }
+    }
+    const ft = $('#arcade-feature-title');
+    if (ft) ft.textContent = game.name;
+    const p = $('#arcade-feature-platform');
+    if (p) { p.textContent = platformLabelOf(game); p.className = 'detail-platform ' + platformKeyOf(game); }
+    const cache = state.detailCache.get(game.id);
+    const meta = $('#arcade-feature-meta');
+    if (meta) meta.innerHTML = arcadeMetaLine(game, cache);
+    const desc = $('#arcade-feature-desc');
+    const txt = cache && (cache.shortDescription || cache.detailedDescription)
+      ? arcadeDescText(game, cache)
+      : '';
+    if (desc) {
+      desc.classList.toggle('loading', !txt);
+      desc.textContent = txt || T('detail.loading');
+    }
+    arcadeHeroInfo(game);
+  }
+
+  function arcadeDescText(game, info) {
+    if (info && info.shortDescription) return info.shortDescription;
+    if (info && info.detailedDescription) return info.detailedDescription;
+    const lines = [];
+    lines.push(T('detail.desc.platform', { label: esc(platformLabelOf(game)) }));
+    if (game.romPath) lines.push(T('detail.desc.rom', { path: esc(game.romPath) }));
+    else if (game.installDir) lines.push(T('detail.desc.location', { path: esc(game.installDir) }));
+    if (game.sizeOnDisk) lines.push(T('detail.desc.size', { size: (game.sizeOnDisk / 1073741824).toFixed(1) }));
+    return lines.join('  ·  ');
   }
 
   function arcadeNav(dir) {
@@ -1653,11 +1707,28 @@
   function arcadeNavGrid(dx, dy) {
     const n = state.arcadeList.length;
     if (!state.arcade || n === 0) return;
-    const cols = Math.max(1, state.columns || 5);
-    let next = state.arcadeIndex + dx + dy * cols;
-    if (next < 0) next = 0;
-    if (next >= n) next = n - 1;
-    if (next !== state.arcadeIndex) arcadeFocusIdx(next);
+    const cols = Math.max(1, Math.min(state.columns || 5, 6));
+    const rows = Math.ceil(n / cols);
+    const cur = state.arcadeIndex;
+    const r = Math.floor(cur / cols);
+    const c = cur - r * cols;
+    let next = cur;
+    if (dx !== 0) {
+      const nc = c + dx;
+      if (nc < 0 || nc >= cols) {
+        const nr = Math.max(0, Math.min(r + dx, rows - 1));
+        next = nr * cols + (nc < 0 ? cols - 1 : 0);
+        if (next >= n) next = n - 1;
+      } else {
+        next = cur + dx;
+      }
+    } else if (dy !== 0) {
+      const nr = r + dy;
+      if (nr < 0 || nr >= rows) return;
+      next = nr * cols + c;
+      if (next >= n) next = n - 1;
+    }
+    if (next !== cur) arcadeFocusIdx(next);
   }
 
   function arcadeNavTo(i) {
@@ -1830,24 +1901,6 @@
     }
   }
 
-  function arcadeNav(dir) {
-    if (!state.arcade) return;
-    const n = state.visibleGames.length;
-    if (n === 0) return;
-    state.arcadeIndex = (state.arcadeIndex + dir + n) % n;
-    selectGame(state.visibleGames[state.arcadeIndex].id);
-    renderArcade(arcadeGame());
-  }
-
-  function arcadeNavTo(i) {
-    if (!state.arcade) return;
-    const n = state.visibleGames.length;
-    if (n === 0 || i < 0 || i >= n || i === state.arcadeIndex) return;
-    state.arcadeIndex = i;
-    selectGame(state.visibleGames[i].id);
-    renderArcade(arcadeGame());
-  }
-
   $('#arcade-play').addEventListener('click', () => {
     const g = arcadeGame();
     if (g) {
@@ -1858,6 +1911,13 @@
   $('#arcade-back').addEventListener('click', arcadeBackHome);
   $('#arcade-media-stage').addEventListener('click', openArcadeMediaItem);
   $('#arcade-exit').addEventListener('click', closeArcade);
+  $('#arcade-feature-play').addEventListener('click', () => {
+    const g = arcadeGame();
+    if (g) {
+      launchGame(g.id);
+      setTimeout(closeArcade, 650);
+    }
+  });
 
   /* ═══════════════ CONSOLES DASHBOARD ═══════════════ */
   function consoleGroups() {
@@ -2199,7 +2259,7 @@
 
     // Modo arcade: navegación tipo consola
     if (state.arcade) {
-      if (e.key === 'F11' || e.key === 'Tab' || e.key === 'Backspace') {
+      if (e.key === 'F11') {
         e.preventDefault();
         closeArcade();
         return;
