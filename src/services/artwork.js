@@ -281,12 +281,13 @@ class ArtworkService {
 
     // Todas las fuentes en paralelo (la cola del servicio ya las espacia);
     // después se fusionan en el mismo orden que antes
-    // (rawg → sgdb → igdb → steam → tgdb → wiki).
-    const [rawgR, steamR, sgdbR, igdbR, tgdbR, wikiR] = await Promise.allSettled([
+    // (rawg → sgdb → igdb → steam → pcgw → tgdb → wiki).
+    const [rawgR, steamR, sgdbR, igdbR, pcgwR, tgdbR, wikiR] = await Promise.allSettled([
       this._searchRawg(gameName),
       this._searchSteamStore(gameName),
       this._searchSteamGridDB(gameName),
       this._searchIgdb(gameName),
+      this._searchPcgw(gameName),
       this._searchTheGamesDB(gameName),
       this._searchWikipedia(gameName)
     ]);
@@ -294,6 +295,7 @@ class ArtworkService {
     const steam = (steamR.status === 'fulfilled' ? steamR.value : null) || [];
     const sgdb = (sgdbR.status === 'fulfilled' ? sgdbR.value : null) || [];
     const igdb = (igdbR.status === 'fulfilled' ? igdbR.value : null) || [];
+    const pcgw = (pcgwR.status === 'fulfilled' ? pcgwR.value : null) || [];
     const tgdb = (tgdbR.status === 'fulfilled' ? tgdbR.value : null) || [];
     const wiki = (wikiR.status === 'fulfilled' ? wikiR.value : null) || [];
     const push = (m) => {
@@ -304,6 +306,7 @@ class ArtworkService {
     if (results.length === 0) for (const m of sgdb) push(m);
     for (const m of igdb) push(m);
     for (const r of steam) push(r);
+    for (const m of pcgw) push(m);
     for (const m of tgdb) push(m);
     if (results.length === 0) for (const m of wiki) push(m);
 
@@ -766,6 +769,55 @@ class ArtworkService {
       }
     } catch {
       // ignore
+    }
+    return results;
+  }
+
+  // PCGamingWiki (sin clave): BOXART real de juegos PC de cualquier tienda
+  // (Steam, GOG, Epic, Ubisoft, EA...). Página → buscar el archivo "cover" →
+  // URL de la imagen.
+  async _searchPcgw(name) {
+    const results = [];
+    if (!name) return results;
+    try {
+      const q1 = await this._httpGetJson(
+        `https://www.pcgamingwiki.com/w/api.php?action=query&format=json&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrnamespace=0&gsrlimit=5`,
+        9000
+      );
+      if (q1.status !== 200) return results;
+      const pages = Object.values((JSON.parse(q1.body).query || {}).pages || {});
+      const best = pages
+        .filter((p) => p && p.title)
+        .sort((a, b) => scoreMatch(name, b.title) - scoreMatch(name, a.title))[0];
+      if (!best || scoreMatch(name, best.title) < 60) return results;
+
+      const q2 = await this._httpGetJson(
+        `https://www.pcgamingwiki.com/w/api.php?action=query&format=json&prop=images&titles=${encodeURIComponent(best.title)}&imlimit=50`,
+        9000
+      );
+      if (q2.status !== 200) return results;
+      const imgPage = Object.values((JSON.parse(q2.body).query || {}).pages || {})[0];
+      const imgs = (imgPage && imgPage.images) || [];
+      const coverFile = imgs.filter((i) => /cover/i.test(i.title))[0] ||
+        imgs.filter((i) => /(boxart|box art|\bkey art\b|promo)/i.test(i.title))[0] || null;
+      if (!coverFile) return results;
+
+      const q3 = await this._httpGetJson(
+        `https://www.pcgamingwiki.com/w/api.php?action=query&format=json&titles=${encodeURIComponent(coverFile.title)}&prop=imageinfo&iiprop=url&iiurlwidth=720`,
+        9000
+      );
+      if (q3.status !== 200) return results;
+      const meta = Object.values((JSON.parse(q3.body).query || {}).pages || {})[0];
+      const ii = meta && meta.imageinfo && meta.imageinfo[0];
+      if (!ii || (!ii.url && !ii.thumburl)) return results;
+      const push = (url, width, height) => {
+        if (!url || results.some((r) => r.url === url)) return;
+        results.push({ url, thumb: url, width, height, source: 'pcgw', label: best.title, isWide: true });
+      };
+      push(ii.thumburl || ii.url, 720, 336);
+      push(ii.url || ii.thumburl, 1280, 600);
+    } catch {
+      // ignore — PCGamingWiki puede rate-limitear; devolver [] es correcto
     }
     return results;
   }

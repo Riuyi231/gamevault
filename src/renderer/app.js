@@ -899,6 +899,8 @@
     const view = $('#shot-view');
     const img = $('#shot-img');
     const video = $('#shot-video');
+    const frame = $('#shot-frame');
+    if (frame) frame.style.display = 'none';
     img.style.display = isVideo ? 'none' : '';
     video.style.display = isVideo ? '' : 'none';
     if (isVideo) {
@@ -907,6 +909,18 @@
         video.pause();
         video.removeAttribute('src');
         video.load();
+      }
+      // Tráilers de IGDB (YouTube): se reproducen en un iframe embebido.
+      const yt = String(src || '');
+      if (yt.indexOf('youtube://') === 0) {
+        const vid = yt.slice(10);
+        video.style.display = 'none';
+        if (frame) {
+          frame.style.display = '';
+          frame.src = `https://www.youtube.com/embed/${encodeURIComponent(vid)}?autoplay=1&rel=0`;
+        }
+        view.classList.remove('hidden');
+        return;
       }
       if (window.Hls && /\.m3u8($|\?)/.test(src)) {
         const hls = new window.Hls();
@@ -941,6 +955,11 @@
         video.pause();
         video.removeAttribute('src');
         video.load();
+      }
+      const frame = $('#shot-frame');
+      if (frame) {
+        frame.src = '';
+        frame.style.display = 'none';
       }
       img.src = '';
     }

@@ -249,7 +249,7 @@ class GameInfoService {
       const esc = String(name).replace(/"/g, '\\"');
       const { status, body } = await this._igdbPost(
         '/v4/games',
-        `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,summary,storyline,genres.name,platforms.name,first_release_date,aggregated_rating,rating,rating_count,developers.name,publishers.name; search "${esc}"; where category = 0; limit 8;`
+        `fields name,slug,cover.image_id,screenshots.image_id,artworks.image_id,videos.video_id,summary,storyline,genres.name,platforms.name,first_release_date,aggregated_rating,rating,rating_count,developers.name,publishers.name; search "${esc}"; where category = 0; limit 8;`
       );
       if (status !== 200) return null;
       const list = JSON.parse(body);
@@ -299,6 +299,20 @@ class GameInfoService {
         coverUrl: img(coverId, 'cover_big') || shots[0] || '',
         banner: arts[0] || shots[0] || '',
         screenshots: shots.length ? shots : arts,
+        movies: Array.isArray(best.videos)
+          ? best.videos
+              .map((v) => {
+                const vid = v && v.video_id;
+                if (!vid) return null;
+                return {
+                  src: `youtube://${vid}`,
+                  thumbnail: `https://img.youtube.com/vi/${vid}/hqdefault.jpg`,
+                  name: 'Trailer',
+                  provider: 'youtube'
+                };
+              })
+              .filter(Boolean)
+          : [],
         source: 'igdb',
         platforms: Array.isArray(best.platforms) ? best.platforms.map((p) => p.name).filter(Boolean) : []
       };
@@ -908,6 +922,63 @@ class GameInfoService {
     return item;
   }
 
+  // PCGamingWiki (sin clave): portada BOXART real de juegos PC de cualquier
+  // tienda (Steam, GOG, Epic, Ubisoft, EA...). Solo se consulta cuando la
+  // fuente anterior (Wikipedia/Wikidata) no dejó ninguna imagen, así que no
+  // añade red ni latencia al caso normal.
+  async _pcgwCover(name) {
+    if (!name) return null;
+    const cacheKey = `pcgw:${String(name).toLowerCase().trim()}`;
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey) || null;
+    const scoreMatch = (a, b) => {
+      const na = String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const nb = String(b || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!na || !nb) return 0;
+      if (na === nb) return 200;
+      if (na.length >= 3 && na.includes(nb)) return 100;
+      if (na.length >= 3 && nb.includes(na)) return 100;
+      if (na.startsWith(nb) || nb.startsWith(na)) return 60;
+      return 0;
+    };
+    try {
+      const q1 = await httpGetJson(
+        `https://www.pcgamingwiki.com/w/api.php?action=query&format=json&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrnamespace=0&gsrlimit=5`,
+        9000
+      );
+      if (q1.status !== 200) return null;
+      const pages = Object.values((JSON.parse(q1.body).query || {}).pages || {});
+      const best = pages
+        .filter((p) => p && p.title)
+        .sort((a, b) => scoreMatch(name, b.title) - scoreMatch(name, a.title))[0];
+      if (!best || scoreMatch(name, best.title) < 60) return null;
+
+      const q2 = await httpGetJson(
+        `https://www.pcgamingwiki.com/w/api.php?action=query&format=json&prop=images&titles=${encodeURIComponent(best.title)}&imlimit=50`,
+        9000
+      );
+      if (q2.status !== 200) return null;
+      const imgPage = Object.values((JSON.parse(q2.body).query || {}).pages || {})[0];
+      const imgs = (imgPage && imgPage.images) || [];
+      const coverFile = imgs.filter((i) => /cover/i.test(i.title))[0] ||
+        imgs.filter((i) => /(boxart|box art|\bkey art\b|promo)/i.test(i.title))[0] || null;
+      if (!coverFile) return null;
+
+      const q3 = await httpGetJson(
+        `https://www.pcgamingwiki.com/w/api.php?action=query&format=json&titles=${encodeURIComponent(coverFile.title)}&prop=imageinfo&iiprop=url&iiurlwidth=720`,
+        9000
+      );
+      if (q3.status !== 200) return null;
+      const meta = Object.values((JSON.parse(q3.body).query || {}).pages || {})[0];
+      const ii = meta && meta.imageinfo && meta.imageinfo[0];
+      if (!ii || (!ii.url && !ii.thumburl)) return null;
+      const cover = { coverUrl: ii.url || ii.thumburl, banner: ii.thumburl || ii.url, source: 'pcgw' };
+      this.cache.set(cacheKey, cover);
+      return cover;
+    } catch {
+      return null;
+    }
+  }
+
   async fetchForGame(game) {
     if (!game) return null;
     const cacheKey = game.id;
@@ -947,7 +1018,7 @@ class GameInfoService {
 
     // 4) Steam by name (fallback): cualquier juego puede tener ficha de tienda
     //    aunque se escaneó sin appid (gotas de Epic/Ubisoft, carpetas propias,
-    //    etc.). Solo se usa con coincidencia muy fuerte; si no, se cae a 4).
+    //    etc.). Solo se usa con coincidencia muy fuerte; si no, se cae a 5).
     const appid = await this._findSteamIdByName(game.name);
     if (appid) {
       const info = await this._fetchSteamAppDetails(appid);
@@ -964,9 +1035,18 @@ class GameInfoService {
     //    propias, consolas, etc.) aunque no estén en Steam.
     const wikiInfo = await this._wikiSummary(game.name);
     if (wikiInfo) {
-      const enriched = stampInfo(await this._wikidataEnrich(wikiInfo));
-      this.cache.set(cacheKey, enriched);
-      return enriched;
+      let enriched = await this._wikidataEnrich(wikiInfo);
+      // Si la ficha quedó sin imagen (algunas páginas no traen portada),
+      // se añade la BOXART real de PCGamingWiki (sin clave).
+      if (!enriched.coverUrl && !enriched.banner) {
+        const pcgw = await this._pcgwCover(game.name);
+        if (pcgw) {
+          enriched = { ...enriched, coverUrl: pcgw.coverUrl || enriched.coverUrl, banner: pcgw.banner || enriched.banner };
+        }
+      }
+      const final = stampInfo(enriched);
+      this.cache.set(cacheKey, final);
+      return final;
     }
 
     const fallback = stampInfo({ name: game.name, shortDescription: '', detailedDescription: '', about: '' });
