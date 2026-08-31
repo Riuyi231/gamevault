@@ -90,6 +90,8 @@
     heldSince: {},
     lastNav: {},
     prevPressed: {},
+    toggleHold: 0,
+    toggleFired: false,
     initialDelay: 300,
     repeatRate: 80,
     deadzone: 0.25,
@@ -1568,6 +1570,32 @@
     Sound.select();
   }
 
+  // Una sección tiene juegos visibles si su filtro coincide con algo de la lista actual
+  function arcadeSectionHas(i) {
+    const sec = state.arcadeSections[i];
+    if (!sec) return false;
+    const base = state.visibleGames;
+    if (sec.key === 'all' || sec.key === 'recent') return base.length > 0;
+    const match = sec.key.charAt(0) === 'c'
+      ? (x) => (x.platform || 'Retro') === sec.key.slice(2)
+      : (x) => 'p:' + platformKeyOf(x) === sec.key;
+    return base.some(match);
+  }
+
+  // Cambio de sección con gatillos/Q/E: salta automáticamente las vacías
+  function arcadeSectionStep(dir) {
+    if (!state.arcade) return;
+    const len = state.arcadeSections.length;
+    if (len === 0) return;
+    const next = (state.arcadeSection + dir + len) % len;
+    let i = next;
+    for (let k = 0; k < len; k++) {
+      if (arcadeSectionHas(i)) { arcadeSectionGo(i); return; }
+      i = (i + dir + len) % len;
+    }
+    arcadeSectionGo(next);
+  }
+
   function renderArcadeHome() {
     const list = arcadeSectionGames();
     state.arcadeList = list;
@@ -1579,6 +1607,8 @@
     const grid = $('#arcade-grid');
     const cols = Math.max(1, Math.min(state.columns || 5, 6));
     grid.style.setProperty('--cols', String(cols));
+    const emptyMsg = $('#arcade-empty');
+    if (emptyMsg) emptyMsg.hidden = list.length > 0;
     if (state.arcadeGridFor !== list) {
       grid.innerHTML = '';
       list.forEach((g, i) => {
@@ -2270,6 +2300,16 @@
         else closeArcade();
         return;
       }
+      if (e.key === 'q' || e.key === 'Q') {
+        e.preventDefault();
+        arcadeSectionStep(-1);
+        return;
+      }
+      if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        arcadeSectionStep(1);
+        return;
+      }
       if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
         e.preventDefault();
         if (state.arcadeView === 'game') {
@@ -2494,6 +2534,27 @@
 
     const now = Date.now();
 
+    // L2+R2 sostenidos: entrar/salir del modo consola desde cualquier pantalla
+    if (btn(6) && btn(7) && !modalOpen && !drawerOpen) {
+      if (!GAMEPAD.toggleHold) GAMEPAD.toggleHold = now;
+      if (now - GAMEPAD.toggleHold >= 650 && !GAMEPAD.toggleFired) {
+        GAMEPAD.toggleFired = true;
+        if (state.arcade) {
+          closeArcade();
+          Sound.select();
+        } else if (state.visibleGames.length) {
+          if (homeOpen) {
+            closeHome();
+            Sound.select();
+          }
+          openArcade();
+        }
+      }
+    } else {
+      GAMEPAD.toggleHold = 0;
+      GAMEPAD.toggleFired = false;
+    }
+
     // ── Home / consola: navegación con mando ──
     if (homeOpen) {
       const btns = ['#home-play', '#home-library', '#home-arcade'];
@@ -2531,6 +2592,11 @@
 
     // ── Modo arcade: navegación con mando ──
     if (state.arcade) {
+      // Gatillos SIEMPRE activos, aunque la sección actual quede sin juegos:
+      // sin esto, al llegar a una sección vacía el return de abajo los apagaba
+      // y quedabas atascado en una página muerta hasta usar el ratón.
+      handleButton(pad, 4, () => arcadeSectionStep(-1));
+      handleButton(pad, 5, () => arcadeSectionStep(1));
       const n = state.arcadeList.length;
       if (n === 0) return;
       const arcDx = ax(0);
@@ -2563,8 +2629,6 @@
         handleButton(pad, 0, arcadeOpenGame);
         handleButton(pad, 1, closeArcade);
         handleButton(pad, 8, closeArcade);
-        handleButton(pad, 4, () => arcadeSectionGo((state.arcadeSection - 1 + state.arcadeSections.length) % state.arcadeSections.length));
-        handleButton(pad, 5, () => arcadeSectionGo((state.arcadeSection + 1) % state.arcadeSections.length));
         return;
       }
 
@@ -2623,8 +2687,6 @@
       });
       handleButton(pad, 1, () => { if (state.arcadeView === 'game') arcadeBackHome(); });
       handleButton(pad, 8, () => { if (state.arcadeView === 'game') arcadeBackHome(); });
-      handleButton(pad, 4, () => arcadeSectionGo((state.arcadeSection - 1 + state.arcadeSections.length) % state.arcadeSections.length));
-      handleButton(pad, 5, () => arcadeSectionGo((state.arcadeSection + 1) % state.arcadeSections.length));
       return;
     }
 

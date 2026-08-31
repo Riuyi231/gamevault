@@ -2768,6 +2768,17 @@ input[type='range']::-webkit-slider-thumb {
 .arcade-grid::-webkit-scrollbar { display: none; }
 .arcade-grid .arcade-tile { width: auto; }
 .arcade-tile.cur .arcade-tile-name { color: var(--accent); }
+.arcade-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 1px;
+}
 
 /* ═══════════ ARCADE GAME PAGE (página de juego grande) ═══════════ */
 .arcade-game {
